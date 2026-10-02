@@ -1,0 +1,2 @@
+# Solo necesaria para generar el guión (se puede omitir con --no-transcribe)
+faster-whisper>=1.0
