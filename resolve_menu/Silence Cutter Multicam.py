@@ -21,7 +21,8 @@ PROJECT = os.environ.get("SILENCE_CUTTER_PROJECT", "")
 PLAN = os.environ.get("SILENCE_CUTTER_PLAN", "")
 CUTS = os.environ.get("SILENCE_CUTTER_CUTS", "")
 OVERLAYS = os.environ.get("SILENCE_CUTTER_OVERLAYS", "")
-OPTS = {"noise": -30.0, "min_silence": 0.5, "padding": 0.1, "min_speech": 0.15,
+OPTS = {"noise": None,  # None = automático; o un nivel fijo en dB
+         "min_silence": 0.5, "padding": 0.1, "min_speech": 0.15,
         "model": "small", "language": None, "max_cut": 0.5}
 AI_MODEL = None
 

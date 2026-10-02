@@ -6,8 +6,12 @@ from pathlib import Path
 
 from .core import total_length
 from .edit import InvalidDecisions
-from .pipeline import analyze, apply_cuts, detect_segments, get_words, load_words, words_file
+from .pipeline import analyze, apply_cuts, detect_segments_info, get_words, load_words, words_file
 from .script import build_cues, to_markdown, to_srt
+
+
+def _noise(value: str) -> float | None:
+    return None if value.lower() == "auto" else float(value)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -16,7 +20,8 @@ def _parser() -> argparse.ArgumentParser:
         description="Corta silencios (y, con IA, lo que no aporta) y genera un guión con los tiempos del video recortado.",
     )
     p.add_argument("media", help="video o audio de entrada")
-    p.add_argument("--noise", type=float, default=-30.0, help="umbral de silencio en dB (def. -30)")
+    p.add_argument("--noise", type=_noise, default=None, metavar="auto|DB",
+                   help="umbral de silencio: 'auto' (def.) lo calcula del ruido de fondo del archivo, o un nivel fijo en dB, ej. -35")
     p.add_argument("--min-silence", type=float, default=0.5, help="silencio mínimo a cortar, en s (def. 0.5)")
     p.add_argument("--padding", type=float, default=0.1, help="holgura conservada junto al habla, en s (def. 0.1)")
     p.add_argument("--min-speech", type=float, default=0.15, help="descarta tramos hablados más cortos, en s")
@@ -29,6 +34,8 @@ def _parser() -> argparse.ArgumentParser:
                    help="aplica los cortes aprobados (los 'apply': true) además de los silencios")
     p.add_argument("--ai-model", default=None, help="modelo de Claude para --analyze")
     p.add_argument("--max-cut", type=float, default=0.5, help="fracción máxima de palabras que se pueden cortar (def. 0.5)")
+    p.add_argument("--render", default=None, metavar="SALIDA.MP4",
+                   help="renderiza la versión recortada (720p) para revisarla sin Resolve")
     p.add_argument("--resolve", action="store_true", help="crear la timeline recortada en DaVinci Resolve (requiere Studio)")
     p.add_argument("--overlays", default=None, help="overlays.manifest.json de render-overlays.mjs (Remotion); se colocan en V2 con --resolve")
     p.add_argument("--out", default=None, help="carpeta de salida (def. junto al archivo)")
@@ -50,9 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out) if args.out else media.parent
     out.mkdir(parents=True, exist_ok=True)
 
-    duration, segments = detect_segments(
+    duration, segments, threshold = detect_segments_info(
         str(media), args.noise, args.min_silence, args.padding, args.min_speech
     )
+    print(f"Umbral de silencio: {threshold:.1f} dB ({'automático' if args.noise is None else 'fijo'})")
 
     if args.analyze:
         cuts_file, report, n = analyze(
@@ -91,6 +99,12 @@ def main(argv: list[str] | None = None) -> int:
         (out / f"{media.stem}.srt").write_text(to_srt(cues), encoding="utf-8")
         (out / f"{media.stem}.guion.md").write_text(to_markdown(cues, media.stem), encoding="utf-8")
         print(f"Guión: {out / (media.stem + '.guion.md')} y .srt ({len(cues)} líneas)")
+
+    if args.render:
+        from .core import render_cut
+
+        render_cut(str(media), segments, args.render)
+        print(f"Video recortado: {args.render}")
 
     placements = None
     if args.overlays:

@@ -24,7 +24,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--cuts", default=None, metavar="CORTES.JSON", help="aplica cortes aprobados además de los silencios")
     p.add_argument("--plan", action="store_true", help="Claude propone los planos y escribe <proyecto>.planos.json para revisar")
     p.add_argument("--apply-plan", default=None, metavar="PLANOS.JSON", help="aplica el plan de planos aprobado")
-    p.add_argument("--noise", type=float, default=-30.0)
+    p.add_argument("--noise", type=lambda v: None if v.lower() == "auto" else float(v), default=None, metavar="auto|DB")
     p.add_argument("--min-silence", type=float, default=0.5)
     p.add_argument("--padding", type=float, default=0.1)
     p.add_argument("--min-speech", type=float, default=0.15)

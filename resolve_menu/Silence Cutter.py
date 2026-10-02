@@ -15,7 +15,7 @@ import sys
 import traceback
 
 HOME = os.environ.get("SILENCE_CUTTER_HOME", "")
-NOISE_DB = -30.0
+NOISE_DB = None  # None = automático (del ruido de fondo del clip); o un nivel fijo, ej. -35.0
 MIN_SILENCE = 0.5
 PADDING = 0.1
 MIN_SPEECH = 0.15

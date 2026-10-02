@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .core import Interval, parse_silencedetect, probe_duration, run_silencedetect, speech_segments
+from .core import (
+    Interval, auto_threshold, probe_duration, rms_levels, silences_from_levels, speech_segments,
+)
 from .edit import (
     cuts_to_intervals, proposal_from_json, proposal_to_json, proposal_to_markdown,
     subtract, validate,
@@ -13,12 +15,22 @@ from .edit import (
 from .script import Word
 
 
-def detect_segments(
-    media: str, noise: float, min_silence: float, padding: float, min_speech: float
-) -> tuple[float, list[Interval]]:
+def detect_segments_info(
+    media: str, noise: float | None, min_silence: float, padding: float, min_speech: float
+) -> tuple[float, list[Interval], float]:
+    """`noise` en dB, o None para calcularlo del propio audio. Devuelve (duración, tramos, umbral usado)."""
     duration = probe_duration(media)
-    silences = parse_silencedetect(run_silencedetect(media, noise, min_silence), duration)
-    return duration, speech_segments(silences, duration, padding, min_speech)
+    levels = rms_levels(media)
+    threshold = auto_threshold(levels) if noise is None else noise
+    silences = silences_from_levels(levels, threshold, min_silence, duration)
+    return duration, speech_segments(silences, duration, padding, min_speech), threshold
+
+
+def detect_segments(
+    media: str, noise: float | None, min_silence: float, padding: float, min_speech: float
+) -> tuple[float, list[Interval]]:
+    duration, segments, _ = detect_segments_info(media, noise, min_silence, padding, min_speech)
+    return duration, segments
 
 
 def words_file(out: Path, stem: str) -> Path:

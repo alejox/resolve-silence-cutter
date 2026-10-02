@@ -68,6 +68,82 @@ def parse_silencedetect(stderr: str, duration: float) -> list[Interval]:
     return silences
 
 
+RMS_WINDOW = 0.05  # segundos por ventana de nivel
+_PTS = re.compile(r"pts_time:\s*([\d.]+)")
+_RMS = re.compile(r"RMS_level=(\S+)")
+
+
+def parse_rms_levels(text: str) -> list[float]:
+    """Niveles RMS (dB) por ventana, de la salida de `astats`+`ametadata`. -inf se toma como -120."""
+    levels: list[float] = []
+    seen_window = False
+    for line in text.splitlines():
+        if _PTS.search(line):
+            seen_window = True
+            continue
+        m = _RMS.search(line)
+        if m and seen_window:
+            v = m.group(1)
+            levels.append(-120.0 if v in ("-inf", "inf", "nan") else float(v))
+            seen_window = False
+    return levels
+
+
+def rms_levels(path: str, window: float = RMS_WINDOW, rate: int = 16000) -> list[float]:
+    """Nivel RMS por ventana de `window` s.
+
+    `silencedetect` de ffmpeg mira la amplitud de cada MUESTRA: el ruido de fondo (ventilador,
+    zumbido) tiene picos que superan cualquier umbral razonable aunque su nivel medio sea bajo,
+    y entonces no detecta ninguna pausa. El RMS por ventanas sí separa habla de ruido.
+    """
+    n = int(rate * window)
+    proc = subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn", "-ac", "1", "-af",
+            f"aresample={rate},asetnsamples=n={n}:p=0,astats=metadata=1:reset=1,"
+            "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",
+            "-f", "null", "-",
+        ],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló:\n{proc.stderr[-800:]}")
+    return parse_rms_levels(proc.stdout)
+
+
+def auto_threshold(levels: list[float], fraction: float = 0.3) -> float:
+    """Umbral entre el ruido de fondo (percentil 10) y el habla (percentil 90), en dB.
+
+    Si casi no hay diferencia entre ambos (audio de nivel constante) no hay pausas que
+    separar: devuelve un umbral por debajo del ruido, que no corta nada.
+    """
+    if not levels:
+        return -60.0
+    ordered = sorted(levels)
+    low = ordered[int(0.10 * (len(ordered) - 1))]
+    high = ordered[int(0.90 * (len(ordered) - 1))]
+    if high - low < 6.0:
+        return low - 3.0
+    return low + fraction * (high - low)
+
+
+def silences_from_levels(
+    levels: list[float], threshold: float, min_silence: float, duration: float,
+    window: float = RMS_WINDOW,
+) -> list[Interval]:
+    silences: list[Interval] = []
+    start: int | None = None
+    for i, v in enumerate(levels + [float("inf")]):  # el centinela cierra un silencio abierto
+        if v < threshold and start is None:
+            start = i
+        elif v >= threshold and start is not None:
+            s, e = start * window, min(duration, i * window)
+            if e - s >= min_silence:
+                silences.append(Interval(s, e))
+            start = None
+    return silences
+
+
 def speech_segments(
     silences: list[Interval],
     duration: float,
@@ -119,3 +195,25 @@ def remap_time(t: float, segments: list[Interval]) -> float | None:
 
 def total_length(segments: list[Interval]) -> float:
     return sum(s.length for s in segments)
+
+
+def render_cut(path: str, segments: list[Interval], out: str, height: int = 720, crf: int = 26) -> None:
+    """Renderiza la versión recortada (para revisarla sin Resolve). Une los tramos con trim+concat."""
+    if not segments:
+        raise ValueError("no hay tramos que renderizar")
+    parts, joined = [], []
+    for i, s in enumerate(segments):
+        parts.append(
+            f"[0:v]trim=start={s.start:.3f}:end={s.end:.3f},setpts=PTS-STARTPTS,scale=-2:{height}[v{i}];"
+            f"[0:a]atrim=start={s.start:.3f}:end={s.end:.3f},asetpts=PTS-STARTPTS[a{i}]"
+        )
+        joined.append(f"[v{i}][a{i}]")
+    graph = ";".join(parts) + ";" + "".join(joined) + f"concat=n={len(segments)}:v=1:a=1[v][a]"
+    proc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", path, "-filter_complex", graph,
+         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", str(crf), "-preset", "veryfast",
+         "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg falló al renderizar:\n{proc.stderr[-800:]}")

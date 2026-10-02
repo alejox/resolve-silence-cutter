@@ -4,7 +4,7 @@ Corta los silencios de un video o audio, transcribe lo que queda y genera un **g
 
 ## Qué hace
 
-1. Detecta silencios con `ffmpeg silencedetect`.
+1. Detecta pausas midiendo el nivel RMS por ventanas de 50 ms (no `silencedetect`, que mira la amplitud de cada muestra y no detecta pausas si hay ruido de fondo).
 2. Calcula los tramos hablados (con un poco de holgura para que el corte no suene seco).
 3. Transcribe con [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (palabra por palabra).
 4. Reubica cada palabra en el video recortado y escribe:
@@ -28,8 +28,11 @@ Las palabras que caen en un silencio eliminado no aparecen en el guión.
 # solo cortar + guión
 python -m silence_cutter entrevista.mp4 --language es
 
-# ajustar la sensibilidad
+# ajustar la sensibilidad (o --noise auto, el valor por defecto)
 python -m silence_cutter entrevista.mp4 --noise -35 --min-silence 0.4 --padding 0.15
+
+# renderizar el resultado (720p) para revisarlo sin Resolve
+python -m silence_cutter entrevista.mp4 --no-transcribe --render recortado.mp4
 
 # sin transcripción (rápido)
 python -m silence_cutter entrevista.mp4 --no-transcribe
@@ -40,7 +43,7 @@ python -m silence_cutter entrevista.mp4 --language es --resolve
 
 | Opción | Def. | Para qué |
 |---|---|---|
-| `--noise` | `-30` | Umbral en dB bajo el cual es silencio. Más bajo (`-40`) = corta menos. |
+| `--noise` | `auto` | Umbral de silencio. `auto` lo calcula del ruido de fondo del propio archivo (entre su percentil 10 y 90 de nivel); o un nivel fijo en dB (`-35`). |
 | `--min-silence` | `0.5` | Silencio mínimo a cortar, en segundos. |
 | `--padding` | `0.1` | Silencio que se conserva a cada lado del habla. |
 | `--min-speech` | `0.15` | Descarta ruidos más cortos que esto. |
