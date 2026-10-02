@@ -94,34 +94,40 @@ python -m silence_cutter multicam proyecto.json --apply-plan proyecto.planos.jso
 
 **Sin probar**: la colocación en Resolve real (en especial `SetProperty` para escala y posición del lateral). Y no mira la imagen: decide por la transcripción y las descripciones que tú das.
 
-## Desde el menú de Resolve (sin terminal)
+## Instalar y usar en DaVinci Resolve (Mac)
 
-1. Copia `resolve_menu/Silence Cutter.py` a la carpeta de scripts de Resolve (`Scripts/Edit`):
-   - macOS: `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Edit`
-   - Windows: `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Edit`
-   - Linux: `~/.local/share/DaVinciResolve/Fusion/Scripts/Edit`
-2. Define la variable de entorno `SILENCE_CUTTER_HOME` con la ruta de este repo (o edita `HOME` en el script). Ajusta ahí mismo `NOISE_DB`, `LANGUAGE`, etc.
-3. Con una timeline abierta y el clip en V1: *Workspace > Scripts > Edit > Silence Cutter*.
+Funciona desde el menú *Workspace > Scripts*, también en la versión gratuita (el scripting desde fuera, `--resolve` en la terminal, requiere Studio).
 
-En macOS añade a mano `/opt/homebrew/bin` al PATH si `ffmpeg` no se encuentra (el script ya lo intenta). Para los cortes con Claude, el script tiene `ANALYZE` y `SILENCE_CUTTER_CUTS` (dos pasadas, igual que arriba). Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
+**1. Requisitos**
+```bash
+brew install ffmpeg                      # corta y mide el audio
+pip3 install faster-whisper              # solo si quieres guión (ver nota del Python abajo)
+```
+**2. Instalar** (crea enlaces: un `git pull` actualiza todo)
+```bash
+git clone https://github.com/alejox/resolve-silence-cutter
+cd resolve-silence-cutter
+git checkout claude/new-repo-kh63yw     # hasta que esta rama se fusione en main
+./install-resolve.sh
+```
+Reinicia Resolve.
 
-## Overlays de Remotion (lower thirds, keywords, etc.)
+**3. Comprobar** con *Workspace > Scripts > Edit > Silence Cutter Check*. Resolve no muestra consola para estos scripts: el resultado queda en `Silence Cutter Check.log` dentro de la carpeta del repo. Te dice qué Python usa Resolve, si encuentra `ffmpeg`, `faster-whisper` y tu API key.
 
-Los componentes del repo [`alejox/remotion`](https://github.com/alejox/remotion) se pueden usar como overlays con transparencia sobre la timeline recortada.
+> **El Python de Resolve puede no ser el de tu terminal.** `faster-whisper` debe instalarse en el Python que usa Resolve: el log de *Check* muestra su ruta (`Python que usa Resolve: ... (/ruta/python3)`); instala con `/ruta/python3 -m pip install faster-whisper`.
 
-1. En `remotion`, renderiza los beats de tu `config` (con `at` en segundos del **original**):
-   ```bash
-   node scripts/render-overlays.mjs mis-beats.json out/overlays
-   ```
-   Genera un `.mov` ProRes 4444 con alfa por beat y un `overlays.manifest.json`. Los `spotlight` se omiten (necesitan el video de fondo).
-2. Aquí, cortar y colocar en V2:
-   ```bash
-   python -m silence_cutter entrevista.mp4 --resolve --overlays ../remotion/out/overlays/overlays.manifest.json
-   ```
+**4. Usar**: abre un proyecto, pon el clip en la pista **V1** de una timeline y ejecuta *Workspace > Scripts > Edit > Silence Cutter*. Crea una timeline nueva sin silencios y deja el guión (`.guion.md`, `.srt`) junto al archivo original. El resultado, o el error, queda en `Silence Cutter.log`.
 
-Cómo se ubican: cada `at` se convierte a su posición en el video recortado. Un beat que cae en un silencio eliminado se **omite** (se avisa en consola); uno que empieza en un tramo pero lo excede se **recorta** al final del tramo.
+Ajustes (`NOISE_DB`, `LANGUAGE`, `TRANSCRIBE`, ...) están arriba en el propio script; ábrelo con un editor de texto. Para cortes y planos con Claude: el script tiene `ANALYZE` y las rutas `SILENCE_CUTTER_CUTS` / `SILENCE_CUTTER_PLAN` (dos pasadas, como en la terminal).
 
-Límites: sin video detrás, el vidrio (`lowerThird`, `checklist`, `subscribe`) se ve como un panel oscuro translúcido, sin desenfoque. El texto sin vidrio (`title`, `keyword`, `value`, `compare`) queda igual que en la plantilla. `--resolve` desde la terminal necesita Resolve Studio (scripting externo). En la versión gratuita usa el script del menú, que también coloca overlays si defines `SILENCE_CUTTER_OVERLAYS` con la ruta del manifiesto.
+**Variables de entorno en macOS:** una app abierta desde el Dock (Resolve) **no lee** tu `.zshrc`. Por eso:
+- la API key de Anthropic se lee de `~/.config/silence-cutter/anthropic_key` (un archivo con solo la clave; `chmod 600`). Vive fuera del repo para no subirla por error;
+- las rutas de cortes, planos y overlays se escriben en las constantes del script (o, con el script abierto desde la terminal con `export`, en variables).
+
+**Probar sin Resolve** (recomendado primero, con tu video):
+```bash
+python3 -m silence_cutter mi_video.mov --no-transcribe --render prueba.mp4
+```
 
 ## Pruebas
 

@@ -1,6 +1,6 @@
 """Edición por planos (cámara, pantalla, productos) desde Workspace > Scripts de DaVinci Resolve.
 
-Instalación: igual que `Silence Cutter.py` (carpeta Scripts/Edit y SILENCE_CUTTER_HOME).
+Instalación: igual que `Silence Cutter.py` (./install-resolve.sh).
 Define SILENCE_CUTTER_PROJECT con la ruta de tu proyecto.json (ver examples/proyecto.ejemplo.json).
 
 Dos pasadas, como en la terminal:
@@ -16,7 +16,21 @@ import sys
 import traceback
 from pathlib import Path
 
-HOME = os.environ.get("SILENCE_CUTTER_HOME", "")
+def _find_home():
+    """Carpeta del repo: SILENCE_CUTTER_HOME, o la del enlace simbólico que instaló install-resolve.sh."""
+    env = os.environ.get("SILENCE_CUTTER_HOME", "")
+    if env:
+        return env
+    try:
+        root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        if os.path.isdir(os.path.join(root, "silence_cutter")):
+            return root
+    except NameError:  # Resolve puede ejecutar el script sin __file__
+        pass
+    return ""  # entonces escribe aquí la ruta del repo, entre las comillas
+
+
+HOME = _find_home()
 PROJECT = os.environ.get("SILENCE_CUTTER_PROJECT", "")
 PLAN = os.environ.get("SILENCE_CUTTER_PLAN", "")
 CUTS = os.environ.get("SILENCE_CUTTER_CUTS", "")

@@ -81,10 +81,32 @@ def extract_json(text: str) -> dict:
 Caller = Callable[[str, list[dict], str], str]
 
 
+KEY_FILE = os.path.join(os.path.expanduser("~"), ".config", "silence-cutter", "anthropic_key")
+
+
+def api_key() -> str:
+    """ANTHROPIC_API_KEY, o el contenido de ~/.config/silence-cutter/anthropic_key.
+
+    El archivo existe porque en macOS un programa abierto desde el Dock (DaVinci Resolve) no
+    hereda las variables de tu terminal. Vive fuera del repo para no subir la clave por error.
+    """
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        with open(KEY_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def call_claude(system: str, messages: list[dict], model: str) -> str:
-    key = os.environ.get("ANTHROPIC_API_KEY")
+    key = api_key()
     if not key:
-        raise SystemExit("Define ANTHROPIC_API_KEY para usar --analyze.")
+        raise SystemExit(
+            "Falta la API key de Anthropic. Define ANTHROPIC_API_KEY, o (para Resolve en macOS) "
+            f"guárdala en {KEY_FILE}"
+        )
     body = json.dumps(
         {"model": model, "max_tokens": 4096, "system": system, "messages": messages}
     ).encode()

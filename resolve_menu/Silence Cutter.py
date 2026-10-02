@@ -1,7 +1,8 @@
 """Script para el menú Workspace > Scripts de DaVinci Resolve.
 
-Instalación: copia este archivo a la carpeta Scripts/Edit de Resolve y define
-SILENCE_CUTTER_HOME con la ruta de este repositorio (o edita HOME aquí abajo).
+Instalación: ./install-resolve.sh (crea enlaces en la carpeta Scripts/Edit de Resolve; el script
+encuentra solo la carpeta del repo). En macOS Resolve NO lee las variables de tu terminal: si
+HOME queda vacío, escribe la ruta del repo en `return ""` de _find_home.
 
 Uso: abre una timeline con el clip a limpiar en la pista V1 y ejecútalo desde
 Workspace > Scripts > Edit > Silence Cutter. Crea una timeline nueva sin silencios
@@ -14,7 +15,21 @@ import os
 import sys
 import traceback
 
-HOME = os.environ.get("SILENCE_CUTTER_HOME", "")
+def _find_home():
+    """Carpeta del repo: SILENCE_CUTTER_HOME, o la del enlace simbólico que instaló install-resolve.sh."""
+    env = os.environ.get("SILENCE_CUTTER_HOME", "")
+    if env:
+        return env
+    try:
+        root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        if os.path.isdir(os.path.join(root, "silence_cutter")):
+            return root
+    except NameError:  # Resolve puede ejecutar el script sin __file__
+        pass
+    return ""  # entonces escribe aquí la ruta del repo, entre las comillas
+
+
+HOME = _find_home()
 NOISE_DB = None  # None = automático (del ruido de fondo del clip); o un nivel fijo, ej. -35.0
 MIN_SILENCE = 0.5
 PADDING = 0.1

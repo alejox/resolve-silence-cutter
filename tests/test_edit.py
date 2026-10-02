@@ -135,9 +135,21 @@ class CallClaudeTests(unittest.TestCase):
         self.assertEqual((sent["model"], sent["system"]), ("m-1", "sys"))
 
     def test_missing_key_explains(self):
-        with mock.patch.dict(os.environ, {}, clear=True), self.assertRaises(SystemExit) as cm:
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(ai, "KEY_FILE", "/no/existe"), \
+                self.assertRaises(SystemExit) as cm:
             ai.call_claude("s", [], "m")
         self.assertIn("ANTHROPIC_API_KEY", str(cm.exception))
+        self.assertIn("/no/existe", str(cm.exception))
+
+    def test_key_file_is_used_when_env_is_missing_and_env_wins(self):
+        with tempfile.TemporaryDirectory() as d:
+            kf = Path(d) / "key"
+            kf.write_text("desde-archivo\n")
+            with mock.patch.object(ai, "KEY_FILE", str(kf)):
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertEqual(ai.api_key(), "desde-archivo")
+                with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "desde-env"}):
+                    self.assertEqual(ai.api_key(), "desde-env")
 
 
 class EndToEndTests(unittest.TestCase):
