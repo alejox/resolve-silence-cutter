@@ -1,0 +1,27 @@
+{
+  "audio": "pantalla",
+  "default": "camara",
+  "sources": {
+    "pantalla": {
+      "file": "pantalla.mp4",
+      "role": "screen",
+      "description": "grabación de la pantalla con la demo de la app; trae el audio de la voz"
+    },
+    "camara": {
+      "file": "camara.mp4",
+      "role": "camera",
+      "description": "yo hablando a cámara",
+      "offset": 0.0
+    },
+    "producto_frente": {
+      "file": "producto_frente.mp4",
+      "role": "product",
+      "description": "toma frontal de la caja del producto"
+    },
+    "producto_uso": {
+      "file": "producto_uso.mp4",
+      "role": "product",
+      "description": "el producto en uso sobre un escritorio"
+    }
+  }
+}

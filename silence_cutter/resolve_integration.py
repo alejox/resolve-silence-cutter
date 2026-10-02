@@ -108,3 +108,111 @@ def _place_overlays(project, pool, timeline, placements, track: int) -> None:
         })
     if infos and not pool.AppendToTimeline(infos):
         raise SystemExit("Resolve rechazó los overlays al colocarlos en la timeline.")
+
+
+PIP_SCALE = 0.28  # tamaño del canal lateral respecto al cuadro
+PIP_MARGIN = 0.03  # margen respecto al borde, como fracción del cuadro
+
+
+def pip_properties(side_pos: str, width: int, height: int) -> dict:
+    """Escala y posición del canal lateral, abajo a la derecha (o izquierda).
+
+    Pan/Tilt de Resolve son píxeles desde el centro; Tilt positivo sube la imagen.
+    """
+    w, h = width * PIP_SCALE, height * PIP_SCALE
+    pan = width / 2 - w / 2 - width * PIP_MARGIN
+    tilt = height / 2 - h / 2 - height * PIP_MARGIN
+    return {
+        "ZoomX": PIP_SCALE, "ZoomY": PIP_SCALE,
+        "Pan": pan if side_pos == "right" else -pan,
+        "Tilt": -tilt,
+    }
+
+
+def build_multicam_timeline(project, pieces, name: str, resolve=None, placements=None) -> str:
+    """Timeline con el audio maestro en A1 y, por trozo, el plano elegido en V1 (+ lateral en V2).
+
+    Los clips de imagen entran SIN audio (mediaType 1): el sonido sale solo del canal maestro,
+    así no se duplica la voz ni suena la cámara por detrás de la pantalla.
+    """
+    resolve = resolve or _load_resolve()
+    proj = resolve.GetProjectManager().GetCurrentProject()
+    if proj is None:
+        raise SystemExit("Abre un proyecto en Resolve antes de continuar.")
+    pool = proj.GetMediaPool()
+
+    files = {os.path.abspath(s.file): s.name for s in project.sources.values()}
+    imported = pool.ImportMedia(list(files)) or []
+    clips = {}
+    for c in imported:
+        path = os.path.abspath(c.GetClipProperty("File Path") or "")
+        if path in files:
+            clips[files[path]] = c
+    missing = sorted(set(project.sources) - set(clips))
+    if missing:
+        raise SystemExit(f"Resolve no importó estos canales: {', '.join(missing)}")
+
+    timeline = pool.CreateEmptyTimeline(name)
+    if timeline is None:
+        raise SystemExit(f"No pude crear la timeline '{name}' (¿ya existe?).")
+    proj.SetCurrentTimeline(timeline)
+
+    tl_fps = float(timeline.GetSetting("timelineFrameRate") or 30)
+    width = int(timeline.GetSetting("timelineResolutionWidth") or 1920)
+    height = int(timeline.GetSetting("timelineResolutionHeight") or 1080)
+    origin = timeline.GetStartFrame()
+    needs_pip = any(p.shot.layout == "pip" for p in pieces)
+    top = 3 if placements else (2 if needs_pip else 1)
+    for _ in range(top):
+        if timeline.GetTrackCount("video") >= top:
+            break
+        if not timeline.AddTrack("video"):
+            raise SystemExit(f"No pude agregar la pista de video V{top} en Resolve.")
+
+    def fps_of(src_name: str) -> float:
+        return float(clips[src_name].GetClipProperty("FPS") or tl_fps)
+
+    infos, pip_of = [], {}
+    cum = 0.0
+    for piece in pieces:
+        length = piece.interval.length
+        rec = origin + int(round(cum * tl_fps))
+        frames_tl = int(round((cum + length) * tl_fps)) - int(round(cum * tl_fps))
+        if frames_tl < 1:
+            cum += length
+            continue
+
+        def clip_info(src_name: str, track: int, media_type: int) -> dict:
+            src = project.sources[src_name]
+            f = fps_of(src_name)
+            t0 = piece.play_from if src.role == "product" else piece.interval.start + src.offset
+            start = int(round(t0 * f))
+            return {
+                "mediaPoolItem": clips[src_name], "startFrame": start,
+                "endFrame": start + max(1, int(round(length * f))) - 1,
+                "mediaType": media_type, "trackIndex": track, "recordFrame": rec,
+            }
+
+        infos.append(clip_info(project.audio, 1, 2))  # voz continua desde el maestro
+        shot = piece.shot
+        if shot.layout == "full":
+            infos.append(clip_info(shot.source, 1, 1))
+        else:
+            infos.append(clip_info(shot.main, 1, 1))
+            pip_of[len(infos)] = shot.side_pos
+            infos.append(clip_info(shot.side, 2, 1))
+        cum += length
+
+    result = pool.AppendToTimeline(infos)
+    if not result:
+        raise SystemExit("Resolve rechazó los clips al armar la timeline multicámara.")
+    if pip_of:
+        if not isinstance(result, list) or len(result) != len(infos):
+            print("Aviso: Resolve no devolvió los clips; el lateral queda sin escalar/mover.", file=sys.stderr)
+        else:
+            for idx, pos in pip_of.items():
+                for key, value in pip_properties(pos, width, height).items():
+                    result[idx].SetProperty(key, value)
+    if placements:
+        _place_overlays(proj, pool, timeline, placements, 3)
+    return name

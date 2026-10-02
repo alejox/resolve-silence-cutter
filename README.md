@@ -67,6 +67,30 @@ Cómo está protegido:
 
 Qué **no** hace: no mira la imagen (solo audio y texto), así que no detecta que te equivocaste a cámara en silencio. Y la calidad de las decisiones depende del modelo y de la transcripción; revisa siempre `.cortes.md`. La transcripción se envía a la API de Anthropic y tiene costo por uso.
 
+## Varias fuentes: cámara, pantalla y productos (edición por planos)
+
+Cada archivo es un **canal con nombre y descripción** (`proyecto.json`, ver `examples/proyecto.ejemplo.json`). Claude solo ve esos nombres y descripciones, así que no tiene que adivinar qué es cada archivo. Elige qué se ve según lo que se dice:
+
+- **Un canal a pantalla completa**: la cámara cuando hablas a la audiencia, una toma de producto cuando lo mencionas.
+- **Un canal principal con otro al costado**: la pantalla con la cámara en una esquina cuando explicas lo que se ve.
+
+```bash
+export ANTHROPIC_API_KEY=...
+# 1) Claude propone los planos (no toca nada)
+python -m silence_cutter multicam proyecto.json --plan --language es
+#    -> proyecto.planos.md (para leer) y proyecto.planos.json (para editar)
+# 2) corrige lo que no te guste en el .json y aplica (cortes de silencio incluidos)
+python -m silence_cutter multicam proyecto.json --apply-plan proyecto.planos.json
+```
+
+- **Audio**: por defecto lo da el canal de pantalla (`"audio": "pantalla"`). Si viene aparte, define un canal con `"role": "audio"` y apúntalo en `audio`. La voz sale solo de ese canal; los demás clips entran sin sonido.
+- **Sincronía**: `offset` por canal, en segundos (`tiempo_del_canal = tiempo_del_maestro + offset`). Si el offset deja a un canal sin imagen en un momento que se le pide, el plan se rechaza con un mensaje. **No hay sincronía automática por audio todavía**: el offset se pone a mano.
+- **Tomas de producto**: se reproducen desde su inicio y no pueden durar más que su archivo (Claude ve la duración de cada una). Si un corte cae en medio, la toma sigue donde iba.
+- **Protecciones**: igual que los cortes: Claude responde con cambios de plano por palabra, el código valida todo (canales que existen, orden, duración de producto, lateral válido) y reintenta una vez con los errores concretos.
+- **En Resolve**: voz en A1; el plano en V1 y el lateral en V2 (escala 28 %, esquina inferior); los overlays de Remotion van en V3. En la versión gratuita usa `resolve_menu/Silence Cutter Multicam.py`.
+
+**Sin probar**: la colocación en Resolve real (en especial `SetProperty` para escala y posición del lateral). Y no mira la imagen: decide por la transcripción y las descripciones que tú das.
+
 ## Desde el menú de Resolve (sin terminal)
 
 1. Copia `resolve_menu/Silence Cutter.py` a la carpeta de scripts de Resolve (`Scripts/Edit`):

@@ -36,6 +36,13 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "multicam":  # python -m silence_cutter multicam proyecto.json ...
+        from .multicam_cli import main as multicam_main
+
+        return multicam_main(argv[1:])
     args = _parser().parse_args(argv)
     media = Path(args.media)
     if not media.is_file():
