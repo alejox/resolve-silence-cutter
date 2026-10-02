@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-# Instala los scripts del menú Workspace (Área de trabajo) > Scripts (Secuencias de comandos) de
-# DaVinci Resolve.
+# Instala Silence Cutter en el menú Workspace (Área de trabajo) > Scripts (Secuencias de comandos) de
+# DaVinci Resolve. Por defecto instala los scripts en LUA: funcionan aunque Resolve no encuentre Python
+# (hacen el trabajo pesado llamando a python3 por la terminal).
 #
-#   ./install-resolve.sh            enlaces en la carpeta de scripts de TU USUARIO (un `git pull` actualiza todo)
-#   ./install-resolve.sh --copy     copias en la carpeta de tu usuario (si Resolve no ve los enlaces)
-#   ./install-resolve.sh --system   copias en la carpeta del SISTEMA (todos los usuarios); pide tu contraseña
+#   ./install-resolve.sh             copias en la carpeta de scripts de TU USUARIO
+#   ./install-resolve.sh --system    copias en la carpeta del SISTEMA (todos los usuarios); pide tu contraseña
+#   ./install-resolve.sh --python    además instala los scripts en Python (solo útiles si Resolve ejecuta Python)
+#
+# Son COPIAS con la ruta de este repo escrita dentro: repite el comando después de un `git pull`.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODE="link"
 SUDO=""
 SYSTEM=0
+PYTHON_TOO=0
 for arg in "$@"; do
   case "$arg" in
-    --copy) MODE="copy" ;;
-    --system) SYSTEM=1; MODE="copy"; SUDO="${SUDO_BIN:-sudo}" ;;  # SUDO_BIN solo para pruebas
+    --copy) ;;  # compatibilidad: ahora siempre se copia
+    --system) SYSTEM=1; SUDO="${SUDO_BIN:-sudo}" ;;  # SUDO_BIN solo para pruebas
+    --python) PYTHON_TOO=1 ;;
     *) echo "Opción desconocida: $arg"; exit 2 ;;
   esac
 done
@@ -32,30 +36,34 @@ case "$(uname)" in
     else
       SCRIPTS="$HOME/.local/share/DaVinciResolve/Fusion/Scripts"
     fi ;;
-  *) echo "En Windows copia los .py de resolve_menu\\ a %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility y escribe la ruta del repo en REPO_PATH dentro de cada script."; exit 1 ;;
+  *) echo "En Windows copia los .lua de resolve_menu\\ a %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility y escribe la ruta del repo en REPO dentro de cada script."; exit 1 ;;
 esac
 DEST="$SCRIPTS/Utility"
 
-# Versiones anteriores instalaban en .../Scripts/Edit, una carpeta que Resolve no lista: se limpia.
-OLD="$SCRIPTS/Edit"
-if [ -d "$OLD" ]; then
-  $SUDO rm -f "$OLD"/"Silence Cutter"*.py
-  $SUDO rmdir "$OLD" 2>/dev/null || true
-fi
+# Limpieza de instalaciones anteriores: la carpeta Edit (Resolve no la lista) y los .py (si no se piden).
+for d in "$SCRIPTS/Edit" "$DEST"; do
+  if [ -d "$d" ]; then
+    [ "$PYTHON_TOO" = 1 ] && [ "$d" = "$DEST" ] || $SUDO rm -f "$d"/"Silence Cutter"*.py
+  fi
+done
+[ -d "$SCRIPTS/Edit" ] && $SUDO rmdir "$SCRIPTS/Edit" 2>/dev/null || true
 
 $SUDO mkdir -p "$DEST"
-for f in "$REPO"/resolve_menu/*.py; do
-  name="$(basename "$f")"
+install_file() {  # $1 = archivo, $2 = patrón de la línea que lleva la ruta del repo
+  local name; name="$(basename "$1")"
   $SUDO rm -f "$DEST/$name"
-  if [ "$MODE" = "link" ]; then
-    $SUDO ln -s "$f" "$DEST/$name"
-  else
-    # copia y escribe la ruta del repo, porque una copia no puede averiguarla sola
-    sed "s|^REPO_PATH = \"\"|REPO_PATH = \"$REPO\"|" "$f" | $SUDO tee "$DEST/$name" >/dev/null
-  fi
-  echo "instalado ($MODE): $name"
+  sed "s|$2|$3|" "$1" | $SUDO tee "$DEST/$name" >/dev/null
+  echo "instalado: $name"
+}
+for f in "$REPO"/resolve_menu/*.lua; do
+  install_file "$f" '^local REPO = ""' "local REPO = \"$REPO\""
 done
+if [ "$PYTHON_TOO" = 1 ]; then
+  for f in "$REPO"/resolve_menu/*.py; do
+    install_file "$f" '^REPO_PATH = ""' "REPO_PATH = \"$REPO\""
+  done
+fi
 echo
 echo "Carpeta: $DEST"
 echo "Reinicia Resolve (cierra la app del todo) y busca Área de trabajo > Secuencias de comandos."
-echo "Primero ejecuta 'Silence Cutter Check' y lee 'Silence Cutter Check.log' en: $REPO"
+echo "Primero ejecuta 'Silence Cutter Check' y mira Silence Cutter Check.log en: $REPO"

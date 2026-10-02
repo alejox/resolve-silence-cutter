@@ -96,33 +96,27 @@ python -m silence_cutter multicam proyecto.json --apply-plan proyecto.planos.jso
 
 ## Instalar y usar en DaVinci Resolve (Mac)
 
-Funciona desde el menú *Workspace > Scripts*, también en la versión gratuita (el scripting desde fuera, `--resolve` en la terminal, requiere Studio).
+Los scripts del menú *Área de trabajo > Secuencias de comandos* (*Workspace > Scripts*) son en **Lua**, porque Resolve no siempre ejecuta Python (en algunas instalaciones, incluida una gratuita 21.1.1, ni siquiera lo ofrece en la consola). El script de Lua no necesita Python dentro de Resolve: le pide el trabajo pesado a la herramienta por la terminal y arma la timeline con la API de Lua. Funciona en la versión gratuita (el scripting desde fuera, `--resolve`, requiere Studio).
 
-**1. Requisitos**
 ```bash
-brew install ffmpeg                      # corta y mide el audio
-pip3 install faster-whisper              # solo si quieres guión (ver nota del Python abajo)
-```
-**2. Instalar** (crea enlaces: un `git pull` actualiza todo)
-```bash
+brew install ffmpeg
 git clone https://github.com/alejox/resolve-silence-cutter
 cd resolve-silence-cutter
 git checkout claude/new-repo-kh63yw     # hasta que esta rama se fusione en main
 ./install-resolve.sh
 ```
-Reinicia Resolve.
+Cierra Resolve del todo (Cmd+Q) y ábrelo. Deberían aparecer **Silence Cutter** y **Silence Cutter Check** directamente en *Secuencias de comandos*.
 
-**3. Comprobar** con *Área de trabajo > Secuencias de comandos > Silence Cutter Check*. Resolve no muestra consola para estos scripts: el resultado queda en `Silence Cutter Check.log` dentro de la carpeta del repo. Te dice qué Python usa Resolve, si encuentra `ffmpeg`, `faster-whisper` y tu API key.
+1. Ejecuta primero **Silence Cutter Check**: dice qué falta (`io.popen`, Python 3, `ffmpeg`, el paquete, `faster-whisper`, la API key). El resultado queda en `Silence Cutter Check.log` dentro de la carpeta del repo, y también sale en la Consola de comandos (F6).
+2. Abre un proyecto, pon tu clip en la pista **V1** y ejecuta **Silence Cutter**. Crea una timeline nueva "<clip> - sin silencios". Resolve parece congelado mientras trabaja: es normal. El resultado o el error queda en `Silence Cutter.log`.
 
-> **El Python de Resolve puede no ser el de tu terminal.** `faster-whisper` debe instalarse en el Python que usa Resolve: el log de *Check* muestra su ruta (`Python que usa Resolve: ... (/ruta/python3)`); instala con `/ruta/python3 -m pip install faster-whisper`.
+Los ajustes (`NOISE`, `TRANSCRIBE`, `LANGUAGE`...) están arriba en el propio script. Son **copias** con la ruta del repo escrita dentro: repite `./install-resolve.sh` después de un `git pull`. Si tu Resolve lee la carpeta del sistema y no la de tu usuario, usa `./install-resolve.sh --system` (pide contraseña).
 
-**4. Usar**: abre un proyecto, pon el clip en la pista **V1** de una timeline y ejecuta *Área de trabajo > Secuencias de comandos > Silence Cutter* (*Workspace > Scripts* en inglés). Crea una timeline nueva sin silencios y deja el guión (`.guion.md`, `.srt`) junto al archivo original. El resultado, o el error, queda en `Silence Cutter.log`.
+El Python que se usa es el primero que encuentre entre `/Library/Frameworks/Python.framework`, Homebrew y `/usr/bin/python3`. Para transcribir, instala `faster-whisper` en **ese** Python (el *Check* te dice cuál es). El Python de Apple (`/usr/bin/python3`) sirve para cortar silencios.
 
-Ajustes (`NOISE_DB`, `LANGUAGE`, `TRANSCRIBE`, ...) están arriba en el propio script; ábrelo con un editor de texto. Para cortes y planos con Claude: el script tiene `ANALYZE` y las rutas `SILENCE_CUTTER_CUTS` / `SILENCE_CUTTER_PLAN` (dos pasadas, como en la terminal).
+Qué hace hoy el script de Lua: cortar silencios (y guión con `TRANSCRIBE = true`). Los cortes con Claude, los planos con varias fuentes y los overlays se usan desde la terminal (secciones de arriba); todavía no tienen lanzador en Lua. Los scripts en Python (`./install-resolve.sh --python`) solo sirven si tu Resolve ejecuta Python.
 
-**Variables de entorno en macOS:** una app abierta desde el Dock (Resolve) **no lee** tu `.zshrc`. Por eso:
-- la API key de Anthropic se lee de `~/.config/silence-cutter/anthropic_key` (un archivo con solo la clave; `chmod 600`). Vive fuera del repo para no subirla por error;
-- las rutas de cortes, planos y overlays se escriben en las constantes del script (o, con el script abierto desde la terminal con `export`, en variables).
+**Variables de entorno en macOS:** una app abierta desde el Dock (Resolve) **no lee** tu `.zshrc`. La API key de Anthropic se lee de `~/.config/silence-cutter/anthropic_key` (un archivo con solo la clave; `chmod 600`), que vive fuera del repo para no subirla por error.
 
 **Probar sin Resolve** (recomendado primero, con tu video):
 ```bash

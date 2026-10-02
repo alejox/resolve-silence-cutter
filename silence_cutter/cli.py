@@ -92,6 +92,10 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
     print(f"Tramos: {seg_file}")
+    # El lanzador de Lua no tiene JSON: lee los mismos tramos como "inicio<TAB>fin" por línea.
+    (out / f"{media.stem}.segments.tsv").write_text(
+        "".join(f"{s.start:.6f}\t{s.end:.6f}\n" for s in segments), encoding="utf-8"
+    )
 
     if not args.no_transcribe:
         words = words or get_words(str(media), out, media.stem, args.model, args.language)
