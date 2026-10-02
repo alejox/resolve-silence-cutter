@@ -24,6 +24,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--language", default=None, help="idioma, ej. es (def. autodetectar)")
     p.add_argument("--no-transcribe", action="store_true", help="solo cortar, sin guión")
     p.add_argument("--resolve", action="store_true", help="crear la timeline recortada en DaVinci Resolve")
+    p.add_argument("--overlays", default=None, help="overlays.manifest.json de render-overlays.mjs (Remotion); se colocan en V2 con --resolve")
     p.add_argument("--out", default=None, help="carpeta de salida (def. junto al archivo)")
     return p
 
@@ -59,9 +60,22 @@ def main(argv: list[str] | None = None) -> int:
         (out / f"{media.stem}.guion.md").write_text(to_markdown(cues, media.stem), encoding="utf-8")
         print(f"Guión: {out / (media.stem + '.guion.md')} y .srt ({len(cues)} líneas)")
 
+    placements = None
+    if args.overlays:
+        from .overlays import load_manifest, place_overlays
+
+        placements, skipped = place_overlays(load_manifest(args.overlays), segments)
+        print(f"Overlays: {len(placements)} ubicados, {len(skipped)} omitidos (caen en un silencio cortado)")
+        for it in skipped:
+            print(f"  omitido: {it.get('type', '?')} en {it['at']}s")
+        for pl in placements:
+            print(f"  {pl.type or pl.file}: {pl.start:.2f}s por {pl.duration:.2f}s")
+
     if args.resolve:
         from .resolve_integration import build_timeline
 
-        name = build_timeline(str(media), segments, f"{media.stem} - sin silencios")
+        name = build_timeline(
+            str(media), segments, f"{media.stem} - sin silencios", placements=placements
+        )
         print(f"Timeline creada en Resolve: {name}")
     return 0

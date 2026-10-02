@@ -57,6 +57,24 @@ python -m silence_cutter entrevista.mp4 --language es --resolve
 
 Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
 
+## Overlays de Remotion (lower thirds, keywords, etc.)
+
+Los componentes del repo [`alejox/remotion`](https://github.com/alejox/remotion) se pueden usar como overlays con transparencia sobre la timeline recortada.
+
+1. En `remotion`, renderiza los beats de tu `config` (con `at` en segundos del **original**):
+   ```bash
+   node scripts/render-overlays.mjs mis-beats.json out/overlays
+   ```
+   Genera un `.mov` ProRes 4444 con alfa por beat y un `overlays.manifest.json`. Los `spotlight` se omiten (necesitan el video de fondo).
+2. Aquí, cortar y colocar en V2:
+   ```bash
+   python -m silence_cutter entrevista.mp4 --resolve --overlays ../remotion/out/overlays/overlays.manifest.json
+   ```
+
+Cómo se ubican: cada `at` se convierte a su posición en el video recortado. Un beat que cae en un silencio eliminado se **omite** (se avisa en consola); uno que empieza en un tramo pero lo excede se **recorta** al final del tramo.
+
+Límites: sin video detrás, el vidrio (`lowerThird`, `checklist`, `subscribe`) se ve como un panel oscuro translúcido, sin desenfoque. El texto sin vidrio (`title`, `keyword`, `value`, `compare`) queda igual que en la plantilla. Necesita Resolve Studio solo si lo corres desde fuera (`--resolve`); el script del menú no.
+
 ## Pruebas
 
 ```bash
