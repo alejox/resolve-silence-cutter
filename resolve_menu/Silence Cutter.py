@@ -5,7 +5,8 @@ SILENCE_CUTTER_HOME con la ruta de este repositorio (o edita HOME aquí abajo).
 
 Uso: abre una timeline con el clip a limpiar en la pista V1 y ejecútalo desde
 Workspace > Scripts > Edit > Silence Cutter. Crea una timeline nueva sin silencios
-y deja el guión (.guion.md y .srt) junto al archivo original. El resultado queda
+y deja el guión (.guion.md y .srt) junto al archivo original. Si defines
+SILENCE_CUTTER_OVERLAYS (ruta al overlays.manifest.json), coloca los overlays en V2. El resultado queda
 en `Silence Cutter.log`, porque el menú no muestra una consola.
 """
 
@@ -21,6 +22,11 @@ MIN_SPEECH = 0.15
 WHISPER_MODEL = "small"
 LANGUAGE = None  # ej. "es"; None = autodetectar
 TRANSCRIBE = True
+# manifiesto de overlays de Remotion (render-overlays.mjs); "" = sin overlays
+OVERLAYS_MANIFEST = os.environ.get("SILENCE_CUTTER_OVERLAYS", "")
+
+# Resolve no hereda el PATH de la terminal en macOS: ffmpeg de Homebrew no se encontraría.
+os.environ["PATH"] += os.pathsep + os.pathsep.join(["/opt/homebrew/bin", "/usr/local/bin"])
 
 
 def _log_path():
@@ -61,7 +67,16 @@ def run(resolve):
             f.write(to_markdown(cues, os.path.basename(stem)))
         msg += "; guión con %d líneas" % len(cues)
 
-    name = build_timeline(media, segments, os.path.basename(stem) + " - sin silencios", resolve)
+    placements = None
+    if OVERLAYS_MANIFEST:
+        from silence_cutter.overlays import load_manifest, place_overlays
+
+        placements, skipped = place_overlays(load_manifest(OVERLAYS_MANIFEST), segments)
+        msg += "; overlays %d ubicados, %d omitidos" % (len(placements), len(skipped))
+
+    name = build_timeline(
+        media, segments, os.path.basename(stem) + " - sin silencios", resolve, placements
+    )
     return "Listo: %s. Timeline '%s'." % (msg, name)
 
 

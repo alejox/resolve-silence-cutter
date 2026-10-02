@@ -55,7 +55,7 @@ python -m silence_cutter entrevista.mp4 --language es --resolve
 2. Define la variable de entorno `SILENCE_CUTTER_HOME` con la ruta de este repo (o edita `HOME` en el script). Ajusta ahí mismo `NOISE_DB`, `LANGUAGE`, etc.
 3. Con una timeline abierta y el clip en V1: *Workspace > Scripts > Edit > Silence Cutter*.
 
-Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
+En macOS añade a mano `/opt/homebrew/bin` al PATH si `ffmpeg` no se encuentra (el script ya lo intenta). Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
 
 ## Overlays de Remotion (lower thirds, keywords, etc.)
 
@@ -73,7 +73,7 @@ Los componentes del repo [`alejox/remotion`](https://github.com/alejox/remotion)
 
 Cómo se ubican: cada `at` se convierte a su posición en el video recortado. Un beat que cae en un silencio eliminado se **omite** (se avisa en consola); uno que empieza en un tramo pero lo excede se **recorta** al final del tramo.
 
-Límites: sin video detrás, el vidrio (`lowerThird`, `checklist`, `subscribe`) se ve como un panel oscuro translúcido, sin desenfoque. El texto sin vidrio (`title`, `keyword`, `value`, `compare`) queda igual que en la plantilla. Necesita Resolve Studio solo si lo corres desde fuera (`--resolve`); el script del menú no.
+Límites: sin video detrás, el vidrio (`lowerThird`, `checklist`, `subscribe`) se ve como un panel oscuro translúcido, sin desenfoque. El texto sin vidrio (`title`, `keyword`, `value`, `compare`) queda igual que en la plantilla. `--resolve` desde la terminal necesita Resolve Studio (scripting externo). En la versión gratuita usa el script del menú, que también coloca overlays si defines `SILENCE_CUTTER_OVERLAYS` con la ruta del manifiesto.
 
 ## Pruebas
 

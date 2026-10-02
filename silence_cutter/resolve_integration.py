@@ -82,8 +82,11 @@ def _place_overlays(project, pool, timeline, placements, track: int) -> None:
     """
     fps = float(timeline.GetSetting("timelineFrameRate") or 30)
     origin = timeline.GetStartFrame()
-    while timeline.GetTrackCount("video") < track:
-        timeline.AddTrack("video")
+    for _ in range(track):  # acotado: si AddTrack falla no queda en bucle
+        if timeline.GetTrackCount("video") >= track:
+            break
+        if not timeline.AddTrack("video"):
+            raise SystemExit(f"No pude agregar la pista de video V{track} en Resolve.")
 
     clips = pool.ImportMedia([os.path.abspath(p.file) for p in placements])
     by_name = {c.GetClipProperty("File Name"): c for c in clips or []}
