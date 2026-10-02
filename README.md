@@ -112,11 +112,11 @@ git checkout claude/new-repo-kh63yw     # hasta que esta rama se fusione en main
 ```
 Reinicia Resolve.
 
-**3. Comprobar** con *Workspace > Scripts > Edit > Silence Cutter Check*. Resolve no muestra consola para estos scripts: el resultado queda en `Silence Cutter Check.log` dentro de la carpeta del repo. Te dice qué Python usa Resolve, si encuentra `ffmpeg`, `faster-whisper` y tu API key.
+**3. Comprobar** con *Área de trabajo > Secuencias de comandos > Silence Cutter Check*. Resolve no muestra consola para estos scripts: el resultado queda en `Silence Cutter Check.log` dentro de la carpeta del repo. Te dice qué Python usa Resolve, si encuentra `ffmpeg`, `faster-whisper` y tu API key.
 
 > **El Python de Resolve puede no ser el de tu terminal.** `faster-whisper` debe instalarse en el Python que usa Resolve: el log de *Check* muestra su ruta (`Python que usa Resolve: ... (/ruta/python3)`); instala con `/ruta/python3 -m pip install faster-whisper`.
 
-**4. Usar**: abre un proyecto, pon el clip en la pista **V1** de una timeline y ejecuta *Workspace > Scripts > Edit > Silence Cutter*. Crea una timeline nueva sin silencios y deja el guión (`.guion.md`, `.srt`) junto al archivo original. El resultado, o el error, queda en `Silence Cutter.log`.
+**4. Usar**: abre un proyecto, pon el clip en la pista **V1** de una timeline y ejecuta *Área de trabajo > Secuencias de comandos > Silence Cutter* (*Workspace > Scripts* en inglés). Crea una timeline nueva sin silencios y deja el guión (`.guion.md`, `.srt`) junto al archivo original. El resultado, o el error, queda en `Silence Cutter.log`.
 
 Ajustes (`NOISE_DB`, `LANGUAGE`, `TRANSCRIBE`, ...) están arriba en el propio script; ábrelo con un editor de texto. Para cortes y planos con Claude: el script tiene `ANALYZE` y las rutas `SILENCE_CUTTER_CUTS` / `SILENCE_CUTTER_PLAN` (dos pasadas, como en la terminal).
 

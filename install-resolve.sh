@@ -11,10 +11,17 @@ MODE="link"
 [ "${1:-}" = "--copy" ] && MODE="copy"
 
 case "$(uname)" in
-  Darwin) DEST="$HOME/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Edit" ;;
-  Linux)  DEST="$HOME/.local/share/DaVinciResolve/Fusion/Scripts/Edit" ;;
-  *) echo "En Windows copia los .py de resolve_menu\\ a %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Edit y escribe la ruta del repo en REPO_PATH dentro de cada script."; exit 1 ;;
+  Darwin) DEST="$HOME/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility" ;;
+  Linux)  DEST="$HOME/.local/share/DaVinciResolve/Fusion/Scripts/Utility" ;;
+  *) echo "En Windows copia los .py de resolve_menu\\ a %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility y escribe la ruta del repo en REPO_PATH dentro de cada script."; exit 1 ;;
 esac
+
+# Versiones anteriores instalaban en .../Scripts/Edit, una carpeta que Resolve no lista: se limpia.
+OLD="$(dirname "$DEST")/Edit"
+if [ -d "$OLD" ]; then
+  rm -f "$OLD"/"Silence Cutter"*.py
+  rmdir "$OLD" 2>/dev/null || true
+fi
 
 mkdir -p "$DEST"
 for f in "$REPO"/resolve_menu/*.py; do
@@ -30,5 +37,5 @@ for f in "$REPO"/resolve_menu/*.py; do
 done
 echo
 echo "Carpeta: $DEST"
-echo "Reinicia Resolve (cierra la app del todo) y busca Área de trabajo > Secuencias de comandos > Edit."
+echo "Reinicia Resolve (cierra la app del todo) y busca Área de trabajo > Secuencias de comandos."
 echo "Primero ejecuta 'Silence Cutter Check' y lee 'Silence Cutter Check.log' en: $REPO"

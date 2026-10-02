@@ -1,11 +1,11 @@
 """Script para el menú Workspace > Scripts de DaVinci Resolve.
 
-Instalación: ./install-resolve.sh (crea enlaces en la carpeta Scripts/Edit de Resolve; el script
+Instalación: ./install-resolve.sh (crea enlaces en la carpeta Scripts/Utility de Resolve; el script
 encuentra solo la carpeta del repo). En macOS Resolve NO lee las variables de tu terminal: si
 HOME queda vacío, escribe la ruta del repo en REPO_PATH (o instala con --copy, que lo hace por ti).
 
 Uso: abre una timeline con el clip a limpiar en la pista V1 y ejecútalo desde
-Workspace > Scripts > Edit > Silence Cutter. Crea una timeline nueva sin silencios
+Workspace > Scripts > Silence Cutter. Crea una timeline nueva sin silencios
 y deja el guión (.guion.md y .srt) junto al archivo original. Si defines
 SILENCE_CUTTER_OVERLAYS (ruta al overlays.manifest.json), coloca los overlays en V2. El resultado queda
 en `Silence Cutter.log`, porque el menú no muestra una consola.
