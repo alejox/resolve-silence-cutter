@@ -2,7 +2,7 @@
 
 Instalación: ./install-resolve.sh (crea enlaces en la carpeta Scripts/Edit de Resolve; el script
 encuentra solo la carpeta del repo). En macOS Resolve NO lee las variables de tu terminal: si
-HOME queda vacío, escribe la ruta del repo en `return ""` de _find_home.
+HOME queda vacío, escribe la ruta del repo en REPO_PATH (o instala con --copy, que lo hace por ti).
 
 Uso: abre una timeline con el clip a limpiar en la pista V1 y ejecútalo desde
 Workspace > Scripts > Edit > Silence Cutter. Crea una timeline nueva sin silencios
@@ -15,6 +15,9 @@ import os
 import sys
 import traceback
 
+REPO_PATH = ""  # `install-resolve.sh --copy` escribe aquí la ruta del repo; o escríbela tú
+
+
 def _find_home():
     """Carpeta del repo: SILENCE_CUTTER_HOME, o la del enlace simbólico que instaló install-resolve.sh."""
     env = os.environ.get("SILENCE_CUTTER_HOME", "")
@@ -26,7 +29,7 @@ def _find_home():
             return root
     except NameError:  # Resolve puede ejecutar el script sin __file__
         pass
-    return ""  # entonces escribe aquí la ruta del repo, entre las comillas
+    return REPO_PATH
 
 
 HOME = _find_home()

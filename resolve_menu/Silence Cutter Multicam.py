@@ -16,6 +16,9 @@ import sys
 import traceback
 from pathlib import Path
 
+REPO_PATH = ""  # `install-resolve.sh --copy` escribe aquí la ruta del repo; o escríbela tú
+
+
 def _find_home():
     """Carpeta del repo: SILENCE_CUTTER_HOME, o la del enlace simbólico que instaló install-resolve.sh."""
     env = os.environ.get("SILENCE_CUTTER_HOME", "")
@@ -27,7 +30,7 @@ def _find_home():
             return root
     except NameError:  # Resolve puede ejecutar el script sin __file__
         pass
-    return ""  # entonces escribe aquí la ruta del repo, entre las comillas
+    return REPO_PATH
 
 
 HOME = _find_home()

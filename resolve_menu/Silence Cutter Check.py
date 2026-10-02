@@ -17,6 +17,9 @@ def check(name, ok, detail=""):
     lines.append("%s  %s%s" % ("OK " if ok else "FALTA", name, ("  -> " + detail) if detail else ""))
 
 
+REPO_PATH = ""  # `install-resolve.sh --copy` escribe aquí la ruta del repo
+
+
 def _find_home():
     env = os.environ.get("SILENCE_CUTTER_HOME", "")
     if env:
@@ -27,7 +30,7 @@ def _find_home():
             return root
     except NameError:
         pass
-    return ""
+    return REPO_PATH
 
 
 HOME = _find_home()
