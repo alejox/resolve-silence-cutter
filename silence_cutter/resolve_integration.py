@@ -36,8 +36,11 @@ def _load_resolve():
     return resolve
 
 
-def build_timeline(media_path: str, segments: list[Interval], name: str) -> str:
-    resolve = _load_resolve()
+def build_timeline(
+    media_path: str, segments: list[Interval], name: str, resolve=None
+) -> str:
+    """`resolve` ya viene resuelto cuando corre desde el menú Workspace > Scripts."""
+    resolve = resolve or _load_resolve()
     project = resolve.GetProjectManager().GetCurrentProject()
     if project is None:
         raise SystemExit("Abre un proyecto en Resolve antes de continuar.")

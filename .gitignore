@@ -4,3 +4,4 @@ __pycache__/
 *.segments.json
 *.srt
 *.guion.md
+Silence Cutter.log

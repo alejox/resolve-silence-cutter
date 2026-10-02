@@ -46,6 +46,17 @@ python -m silence_cutter entrevista.mp4 --language es --resolve
 | `--min-speech` | `0.15` | Descarta ruidos más cortos que esto. |
 | `--model` | `small` | Modelo de Whisper (`tiny`…`large-v3`). |
 
+## Desde el menú de Resolve (sin terminal)
+
+1. Copia `resolve_menu/Silence Cutter.py` a la carpeta de scripts de Resolve (`Scripts/Edit`):
+   - macOS: `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Edit`
+   - Windows: `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Edit`
+   - Linux: `~/.local/share/DaVinciResolve/Fusion/Scripts/Edit`
+2. Define la variable de entorno `SILENCE_CUTTER_HOME` con la ruta de este repo (o edita `HOME` en el script). Ajusta ahí mismo `NOISE_DB`, `LANGUAGE`, etc.
+3. Con una timeline abierta y el clip en V1: *Workspace > Scripts > Edit > Silence Cutter*.
+
+Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
+
 ## Pruebas
 
 ```bash
