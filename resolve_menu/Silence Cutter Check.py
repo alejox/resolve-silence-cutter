@@ -30,7 +30,12 @@ def _find_home():
             return root
     except NameError:
         pass
-    return REPO_PATH
+    if REPO_PATH:
+        return REPO_PATH
+    for p in sys.path:  # corrido desde la consola: la carpeta que se añadió a sys.path
+        if p and os.path.isdir(os.path.join(p, "silence_cutter")):
+            return p
+    return ""
 
 
 HOME = _find_home()
