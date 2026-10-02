@@ -2,36 +2,56 @@
 # Instala los scripts del menú Workspace (Área de trabajo) > Scripts (Secuencias de comandos) de
 # DaVinci Resolve.
 #
-#   ./install-resolve.sh          enlaces a este repo: un `git pull` actualiza todo
-#   ./install-resolve.sh --copy   copias (si tu Resolve no ve los enlaces); hay que repetirlo tras un `git pull`
+#   ./install-resolve.sh            enlaces en la carpeta de scripts de TU USUARIO (un `git pull` actualiza todo)
+#   ./install-resolve.sh --copy     copias en la carpeta de tu usuario (si Resolve no ve los enlaces)
+#   ./install-resolve.sh --system   copias en la carpeta del SISTEMA (todos los usuarios); pide tu contraseña
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODE="link"
-[ "${1:-}" = "--copy" ] && MODE="copy"
+SUDO=""
+SYSTEM=0
+for arg in "$@"; do
+  case "$arg" in
+    --copy) MODE="copy" ;;
+    --system) SYSTEM=1; MODE="copy"; SUDO="${SUDO_BIN:-sudo}" ;;  # SUDO_BIN solo para pruebas
+    *) echo "Opción desconocida: $arg"; exit 2 ;;
+  esac
+done
 
 case "$(uname)" in
-  Darwin) DEST="$HOME/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility" ;;
-  Linux)  DEST="$HOME/.local/share/DaVinciResolve/Fusion/Scripts/Utility" ;;
+  Darwin)
+    if [ "$SYSTEM" = 1 ]; then
+      SCRIPTS="${RESOLVE_SYSTEM_DIR:-/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts}"
+    else
+      SCRIPTS="$HOME/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts"
+    fi ;;
+  Linux)
+    if [ "$SYSTEM" = 1 ]; then
+      SCRIPTS="${RESOLVE_SYSTEM_DIR:-/opt/resolve/Fusion/Scripts}"
+    else
+      SCRIPTS="$HOME/.local/share/DaVinciResolve/Fusion/Scripts"
+    fi ;;
   *) echo "En Windows copia los .py de resolve_menu\\ a %APPDATA%\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility y escribe la ruta del repo en REPO_PATH dentro de cada script."; exit 1 ;;
 esac
+DEST="$SCRIPTS/Utility"
 
 # Versiones anteriores instalaban en .../Scripts/Edit, una carpeta que Resolve no lista: se limpia.
-OLD="$(dirname "$DEST")/Edit"
+OLD="$SCRIPTS/Edit"
 if [ -d "$OLD" ]; then
-  rm -f "$OLD"/"Silence Cutter"*.py
-  rmdir "$OLD" 2>/dev/null || true
+  $SUDO rm -f "$OLD"/"Silence Cutter"*.py
+  $SUDO rmdir "$OLD" 2>/dev/null || true
 fi
 
-mkdir -p "$DEST"
+$SUDO mkdir -p "$DEST"
 for f in "$REPO"/resolve_menu/*.py; do
   name="$(basename "$f")"
-  rm -f "$DEST/$name"
+  $SUDO rm -f "$DEST/$name"
   if [ "$MODE" = "link" ]; then
-    ln -s "$f" "$DEST/$name"
+    $SUDO ln -s "$f" "$DEST/$name"
   else
     # copia y escribe la ruta del repo, porque una copia no puede averiguarla sola
-    sed "s|^REPO_PATH = \"\"|REPO_PATH = \"$REPO\"|" "$f" > "$DEST/$name"
+    sed "s|^REPO_PATH = \"\"|REPO_PATH = \"$REPO\"|" "$f" | $SUDO tee "$DEST/$name" >/dev/null
   fi
   echo "instalado ($MODE): $name"
 done
