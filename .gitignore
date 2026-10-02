@@ -5,3 +5,5 @@ __pycache__/
 *.srt
 *.guion.md
 Silence Cutter.log
+ultimo.fcpxml
+*.fcpxml

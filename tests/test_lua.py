@@ -1,6 +1,3 @@
-import os
-import subprocess
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,157 +9,60 @@ except ImportError:
     except ImportError:  # pip install lupa
         LuaRuntime = None
 
-REPO = Path(__file__).resolve().parent.parent
-MENU = REPO / "resolve_menu"
-
-FAKE_RESOLVE = """
-captured, created, messages = nil, nil, {}
-local function tl() return {
-  GetItemListInTrack = function(self, kind, idx) return ITEMS end,
-} end
-local pool = {
-  CreateEmptyTimeline = function(self, name) created = name; return {} end,
-  AppendToTimeline = function(self, infos) captured = infos; return true end,
-}
-local project = {
-  GetMediaPool = function(self) return pool end,
-  GetCurrentTimeline = function(self) return HAS_TIMELINE and tl() or nil end,
-  SetCurrentTimeline = function(self, t) end,
-  GetName = function(self) return "proyecto-demo" end,
-}
-resolve = { GetProjectManager = function(self) return { GetCurrentProject = function(self) return project end } end }
-"""
+SRC = (Path(__file__).resolve().parent.parent / "resolve_menu" / "Silence Cutter Importar.lua").read_text(encoding="utf-8")
 
 
-def clip_item(lua, path, fps="30"):
-    clip = lua.eval(
-        "function(path, fps) return { GetClipProperty = function(self, k) "
-        "if k == 'File Path' then return path elseif k == 'FPS' then return fps end end } end"
-    )(path, fps)
-    return lua.eval("function(c) return { GetMediaPoolItem = function(self) return c end } end")(clip)
-
-
-def set_items(lua, *items):
-    lua.globals().ITEMS = lua.eval("function(...) return { ... } end")(*items)
-
-
-def py_popen(cmd):
-    """El Lua de lupa viene sin io.popen: se emula con bash real, que es lo que hace Resolve."""
-    return subprocess.run(["bash", "-c", cmd], capture_output=True, text=True).stdout
-
-
-def run_script(name, items_builder, env=None, has_timeline=True, log_dir=REPO):
+def run(repo="/Users/x/resolve-silence-cutter", imports=True, project=True, sandbox=True):
+    """Ejecuta el script con un Resolve simulado. Devuelve lo que hizo y lo que imprimió."""
     lua = LuaRuntime(unpack_returned_tuples=True)
-    lua.execute("HAS_TIMELINE = " + ("true" if has_timeline else "false"))
-    lua.execute("ITEMS = nil")
-    lua.execute(FAKE_RESOLVE)
-    lua.globals().py_popen = py_popen
-    lua.execute(
-        "io.popen = function(cmd) local out = py_popen(cmd) "
-        "return { read = function(self, f) return out end, close = function(self) return true end } end"
+    lua.execute("calls, created, printed = {}, {}, {}; _print = print; print = function(...) table.insert(printed, table.concat({...}, ' ')) end")
+    if sandbox:  # el Lua de Resolve 21: sin io ni os.execute
+        lua.execute("io = nil; os.execute = nil")
+    lua.execute(f"""
+local pool = {{
+  ImportTimelineFromFile = function(self, path, opts)
+    table.insert(calls, {{ path = path, importSourceClips = opts.importSourceClips }})
+    return {'{}' if imports else 'nil'}
+  end,
+  CreateEmptyTimeline = function(self, name) table.insert(created, name); return {{}} end,
+}}
+local proj = {{ GetMediaPool = function(self) return pool end, SetCurrentTimeline = function(self, t) current_set = true end }}
+resolve = {{ GetProjectManager = function(self) return {{ GetCurrentProject = function(self) return {'proj' if project else 'nil'} end }} end }}
+""")
+    lua.execute(SRC.replace('local REPO = ""', f'local REPO = "{repo}"'))
+    g = lua.globals()
+    return (
+        [dict(path=str(c["path"]), imp=bool(c["importSourceClips"])) for c in g.calls.values()],
+        [str(n) for n in g.created.values()],
+        [str(p) for p in g.printed.values()],
+        bool(g.current_set),
     )
-    items_builder(lua)
-    for k, v in (env or {}).items():
-        os.environ[k] = v
-    log = Path(log_dir) / (name.replace(".lua", "") + ".log")
-    log.unlink(missing_ok=True)
-    lua.execute((MENU / name).read_text(encoding="utf-8"))
-    text = log.read_text(encoding="utf-8") if log.exists() else ""
-    log.unlink(missing_ok=True)
-    return lua, text
 
 
 @unittest.skipIf(LuaRuntime is None, "falta lupa (pip install lupa)")
-class LuaLauncherTests(unittest.TestCase):
-    def setUp(self):
-        self._home = os.environ.get("HOME", "")
-        self.tmp = tempfile.TemporaryDirectory()
-        self.d = Path(self.tmp.name)
-        self.env = {"SILENCE_CUTTER_HOME": str(REPO), "SILENCE_CUTTER_NO_OPEN": "1"}
+class ImportScriptTests(unittest.TestCase):
+    def test_imports_the_latest_fcpxml_without_needing_io_or_os_execute(self):
+        calls, created, printed, current = run()
+        self.assertEqual(calls, [{"path": "/Users/x/resolve-silence-cutter/ultimo.fcpxml", "imp": True}])
+        self.assertEqual(created, [])
+        self.assertTrue(current)  # la timeline importada queda abierta
+        self.assertIn("importada", printed[0])
 
-    def tearDown(self):
-        os.environ["HOME"] = self._home
-        self.tmp.cleanup()
+    def test_failed_import_leaves_a_visible_error_timeline(self):
+        _, created, printed, current = run(imports=False)
+        self.assertEqual(len(created), 1)
+        self.assertTrue(created[0].startswith("SC_ERROR_no_pude_importar_"), created)
+        self.assertFalse(current)
 
-    def make_audio(self):
-        wav = self.d / "clip.wav"
-        subprocess.run(
-            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=f=440:d=7",
-             "-f", "lavfi", "-i", "anullsrc=d=2", "-f", "lavfi", "-i", "sine=f=660:d=6",
-             "-filter_complex", "[0][1][2]concat=n=3:v=0:a=1", str(wav)], check=True)
-        return wav
+    def test_missing_repo_path_is_reported_without_importing(self):
+        calls, created, _, _ = run(repo="")
+        self.assertEqual(calls, [])
+        self.assertTrue(created[0].startswith("SC_ERROR_sin_ruta_del_repo_"), created)
 
-    def test_cuts_run_through_the_cli_and_become_timeline_ranges(self):
-        wav = self.make_audio()
-
-        lua, log = run_script("Silence Cutter.lua", lambda l: set_items(l, clip_item(l, str(wav))), self.env)
-        self.assertIn("Listo: 2 tramos", log)
-        self.assertEqual(str(lua.globals().created), "clip - sin silencios")
-        got = [(int(i["startFrame"]), int(i["endFrame"])) for i in lua.globals().captured.values()]
-        # 0-7.1 s y 8.9-15 s a 30 fps, endFrame inclusivo. El nivel se mide en ventanas de 50 ms, así que
-        # un borde puede correrse hasta ~3 fotogramas; el padding de 0.1 s (3 fotogramas) lo absorbe.
-        self.assertEqual(len(got), 2)
-        self.assertEqual(got[0][0], 0)
-        self.assertAlmostEqual(got[0][1], 212, delta=4)
-        self.assertAlmostEqual(got[1][0], 267, delta=4)
-        self.assertEqual(got[1][1], 449)  # el final del archivo (15 s)
-        self.assertGreater(got[1][0], got[0][1])  # los tramos no se pisan
-        self.assertTrue((self.d / "clip.segments.tsv").is_file())
-
-    def test_empty_v1_is_explained(self):
-        lua, log = run_script("Silence Cutter.lua", lambda l: set_items(l), self.env)
-        self.assertIn("La pista V1 está vacía", log)
-
-    def test_no_timeline_is_explained(self):
-        _, log = run_script("Silence Cutter.lua", lambda l: None, self.env, has_timeline=False)
-        self.assertIn("Abre una timeline primero", log)
-
-    def test_missing_repo_is_explained(self):
-        home = self.d / "home"
-        home.mkdir()
-        env = {"SILENCE_CUTTER_HOME": "", "HOME": str(home), "SILENCE_CUTTER_NO_OPEN": "1"}  # sin repo, el log va a la carpeta personal
-        try:
-            _, log = run_script("Silence Cutter.lua", lambda l: None, env, log_dir=home)
-        finally:
-            os.environ["HOME"] = self._home
-        self.assertIn("No sé dónde está el repo", log)
-
-    def test_cli_failure_is_reported_with_its_output(self):
-        _, log = run_script("Silence Cutter.lua", lambda l: set_items(l, clip_item(l, "/no/existe.mov")), self.env)
-        self.assertIn("La herramienta falló", log)
-        self.assertIn("No existe", log)
-
-    def test_log_is_opened_in_the_editor_on_error_but_not_on_success(self):
-        """Los scripts del menú no muestran ventanas: ante un error el log se abre con `open -t`."""
-        opened = []
-        wav = self.make_audio()
-
-        def run(items_builder, open_env):
-            lua = LuaRuntime(unpack_returned_tuples=True)
-            lua.execute("HAS_TIMELINE = true; ITEMS = nil")
-            lua.execute(FAKE_RESOLVE)
-            lua.globals().py_popen = lambda cmd: (opened.append(cmd) if "open -t" in cmd else None) or py_popen(
-                cmd if "open -t" not in cmd else "true")
-            lua.execute("io.popen = function(cmd) local out = py_popen(cmd) or '' "
-                        "return { read = function(self, f) return out end, close = function(self) return true end } end")
-            items_builder(lua)
-            os.environ.pop("SILENCE_CUTTER_NO_OPEN", None)
-            os.environ["SILENCE_CUTTER_HOME"] = str(REPO)
-            lua.execute((MENU / "Silence Cutter.lua").read_text(encoding="utf-8"))
-            (REPO / "Silence Cutter.log").unlink(missing_ok=True)
-
-        run(lambda l: set_items(l), None)  # V1 vacía -> error
-        self.assertTrue(any("open -t" in c and "Silence Cutter.log" in c for c in opened), opened)
-        opened.clear()
-        run(lambda l: set_items(l, clip_item(l, str(wav))), None)  # éxito
-        self.assertEqual(opened, [])
-
-    def test_check_script_reports_each_requirement(self):
-        _, log = run_script("Silence Cutter Check.lua", lambda l: None, self.env)
-        self.assertIn("Ejecutar comandos desde Lua", log)
-        self.assertRegex(log, r"OK\s+ffmpeg")
-        self.assertRegex(log, r"OK\s+Paquete silence_cutter")
-        self.assertRegex(log, r"OK\s+Conexión con Resolve\s+->\s+proyecto: proyecto-demo")
+    def test_no_open_project_does_not_crash(self):
+        calls, created, printed, _ = run(project=False)
+        self.assertEqual((calls, created), ([], []))
+        self.assertIn("sin_proyecto_abierto", printed[0])
 
 
 if __name__ == "__main__":

@@ -94,34 +94,27 @@ python -m silence_cutter multicam proyecto.json --apply-plan proyecto.planos.jso
 
 **Sin probar**: la colocación en Resolve real (en especial `SetProperty` para escala y posición del lateral). Y no mira la imagen: decide por la transcripción y las descripciones que tú das.
 
-## Instalar y usar en DaVinci Resolve (Mac)
+## Usar con DaVinci Resolve (Mac, también la versión gratuita)
 
-Los scripts del menú *Área de trabajo > Secuencias de comandos* (*Workspace > Scripts*) son en **Lua**, porque Resolve no siempre ejecuta Python (en algunas instalaciones, incluida una gratuita 21.1.1, ni siquiera lo ofrece en la consola). El script de Lua no necesita Python dentro de Resolve: le pide el trabajo pesado a la herramienta por la terminal y arma la timeline con la API de Lua. Funciona en la versión gratuita (el scripting desde fuera, `--resolve`, requiere Studio).
+**Lo que se descubrió probando en Resolve 21 (gratuito):** los scripts de *Área de trabajo > Secuencias de comandos* corren en un Lua **cerrado**: no existe `io` ni `os.execute`, así que no pueden leer archivos, escribirlos ni lanzar comandos. Los `.py` no se listan y la consola solo ofrece Lua (`diagnostico/prueba-lua.lua` lo mide y deja el resultado en los nombres de timelines `SC_...`). Por eso **no hay un botón dentro de Resolve que ejecute la herramienta**. Lo que sí funciona es separar los pasos: la herramienta genera una timeline en un archivo (FCPXML) y Resolve la importa.
 
 ```bash
 brew install ffmpeg
 git clone https://github.com/alejox/resolve-silence-cutter
 cd resolve-silence-cutter
 git checkout claude/new-repo-kh63yw     # hasta que esta rama se fusione en main
-./install-resolve.sh
+
+python3 -m silence_cutter ruta/a/mi_video.mov --no-transcribe --fcpxml
 ```
-Cierra Resolve del todo (Cmd+Q) y ábrelo. Deberían aparecer **Silence Cutter** y **Silence Cutter Check** directamente en *Secuencias de comandos*.
+Esto deja `mi_video.fcpxml` junto al video (el `/usr/bin/python3` de Apple sirve para esto). En Resolve: **Archivo > Importar > Timeline...** y elige ese archivo. Se crea la timeline "mi_video - sin silencios" con los tramos ya cortados y enlazados al archivo original.
 
-1. Ejecuta primero **Silence Cutter Check**: dice qué falta (`io.popen`, Python 3, `ffmpeg`, el paquete, `faster-whisper`, la API key). El resultado queda en `Silence Cutter Check.log` dentro de la carpeta del repo, y también sale en la Consola de comandos (F6).
-2. Abre un proyecto, pon tu clip en la pista **V1** y ejecuta **Silence Cutter**. Crea una timeline nueva "<clip> - sin silencios". Resolve parece congelado mientras trabaja: es normal. El resultado o el error queda en `Silence Cutter.log`.
+- El **timecode embebido** del archivo (p. ej. `14:22:49:00`) se respeta como inicio del medio; sin eso Resolve podría leer desde el segundo 0 y desfasar todo. Los tiempos son fracciones exactas del fotograma (también a 29,97 fps).
+- Opcional: `./install-resolve.sh` instala el script de menú **Silence Cutter Importar**, que importa `ultimo.fcpxml` (la copia que deja `--fcpxml` en la carpeta del repo) sin pasar por el diálogo. Importar es lo único que ese script puede hacer. Si falla aparece una timeline vacía `SC_ERROR_<motivo>`.
+- Si prefieres no importar nada: `--render salida.mp4` renderiza el video recortado.
 
-Los ajustes (`NOISE`, `TRANSCRIBE`, `LANGUAGE`...) están arriba en el propio script. Son **copias** con la ruta del repo escrita dentro: repite `./install-resolve.sh` después de un `git pull`. Si tu Resolve lee la carpeta del sistema y no la de tu usuario, usa `./install-resolve.sh --system` (pide contraseña).
+**Lo que está validado y lo que no.** El FCPXML se valida con tests y con un lector independiente (OpenTimelineIO: mismas duraciones y puntos de inicio). **No está probado importándolo en Resolve real**: si Resolve lo rechaza o desfasa, abre un issue con el mensaje exacto.
 
-El Python que se usa es el primero que encuentre entre `/Library/Frameworks/Python.framework`, Homebrew y `/usr/bin/python3`. Para transcribir, instala `faster-whisper` en **ese** Python (el *Check* te dice cuál es). El Python de Apple (`/usr/bin/python3`) sirve para cortar silencios.
-
-Qué hace hoy el script de Lua: cortar silencios (y guión con `TRANSCRIBE = true`). Los cortes con Claude, los planos con varias fuentes y los overlays se usan desde la terminal (secciones de arriba); todavía no tienen lanzador en Lua. Los scripts en Python (`./install-resolve.sh --python`) solo sirven si tu Resolve ejecuta Python.
-
-**Variables de entorno en macOS:** una app abierta desde el Dock (Resolve) **no lee** tu `.zshrc`. La API key de Anthropic se lee de `~/.config/silence-cutter/anthropic_key` (un archivo con solo la clave; `chmod 600`), que vive fuera del repo para no subirla por error.
-
-**Probar sin Resolve** (recomendado primero, con tu video):
-```bash
-python3 -m silence_cutter mi_video.mov --no-transcribe --render prueba.mp4
-```
+**Qué hay todavía solo por terminal:** los cortes por contenido con Claude, los planos con varias fuentes y los overlays no se exportan a FCPXML aún; `--resolve` (que arma la timeline por la API) requiere Resolve Studio. Para Claude: la API key se lee de `ANTHROPIC_API_KEY` o de `~/.config/silence-cutter/anthropic_key` (un archivo con solo la clave, `chmod 600`).
 
 ## Pruebas
 

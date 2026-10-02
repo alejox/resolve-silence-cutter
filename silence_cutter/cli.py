@@ -34,6 +34,9 @@ def _parser() -> argparse.ArgumentParser:
                    help="aplica los cortes aprobados (los 'apply': true) además de los silencios")
     p.add_argument("--ai-model", default=None, help="modelo de Claude para --analyze")
     p.add_argument("--max-cut", type=float, default=0.5, help="fracción máxima de palabras que se pueden cortar (def. 0.5)")
+    p.add_argument("--fcpxml", nargs="?", const="", default=None, metavar="SALIDA.fcpxml",
+                   help="exporta la timeline recortada como FCPXML para importarla en DaVinci Resolve "
+                        "(Archivo > Importar > Timeline); sin ruta, <video>.fcpxml junto al archivo")
     p.add_argument("--render", default=None, metavar="SALIDA.MP4",
                    help="renderiza la versión recortada (720p) para revisarla sin Resolve")
     p.add_argument("--resolve", action="store_true", help="crear la timeline recortada en DaVinci Resolve (requiere Studio)")
@@ -92,17 +95,30 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
     print(f"Tramos: {seg_file}")
-    # El lanzador de Lua no tiene JSON: lee los mismos tramos como "inicio<TAB>fin" por línea.
-    (out / f"{media.stem}.segments.tsv").write_text(
-        "".join(f"{s.start:.6f}\t{s.end:.6f}\n" for s in segments), encoding="utf-8"
-    )
-
     if not args.no_transcribe:
         words = words or get_words(str(media), out, media.stem, args.model, args.language)
         cues = build_cues(words, segments)
         (out / f"{media.stem}.srt").write_text(to_srt(cues), encoding="utf-8")
         (out / f"{media.stem}.guion.md").write_text(to_markdown(cues, media.stem), encoding="utf-8")
         print(f"Guión: {out / (media.stem + '.guion.md')} y .srt ({len(cues)} líneas)")
+
+    if args.fcpxml is not None:
+        import os
+
+        from .fcpxml import build_fcpxml, probe_media
+
+        target = Path(args.fcpxml) if args.fcpxml else out / f"{media.stem}.fcpxml"
+        xml = build_fcpxml(probe_media(str(media)), segments, f"{media.stem} - sin silencios")
+        target.write_text(xml, encoding="utf-8")
+        print(f"FCPXML: {target}")
+        print("  En Resolve: Archivo > Importar > Timeline... y elige ese archivo.")
+        # Copia fija que lee el script de menú "Silence Cutter Importar": el Lua de Resolve no puede
+        # recibir rutas (no hay io ni os.execute), así que siempre mira el mismo sitio.
+        latest = Path(os.environ.get("SILENCE_CUTTER_LATEST") or Path(__file__).resolve().parent.parent / "ultimo.fcpxml")
+        try:
+            latest.write_text(xml, encoding="utf-8")
+        except OSError:
+            pass
 
     if args.render:
         from .core import render_cut

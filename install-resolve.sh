@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Instala Silence Cutter en el menú Workspace (Área de trabajo) > Scripts (Secuencias de comandos) de
-# DaVinci Resolve. Por defecto instala los scripts en LUA: funcionan aunque Resolve no encuentre Python
-# (hacen el trabajo pesado llamando a python3 por la terminal).
+# Instala el script "Silence Cutter Importar" en el menú Área de trabajo > Secuencias de comandos de DaVinci
+# Resolve. Es un script en Lua que solo IMPORTA la última timeline generada por la herramienta
+# (python3 -m silence_cutter video.mov --fcpxml): el Lua de Resolve 21 no puede leer archivos ni ejecutar nada.
 #
 #   ./install-resolve.sh             copias en la carpeta de scripts de TU USUARIO
 #   ./install-resolve.sh --system    copias en la carpeta del SISTEMA (todos los usuarios); pide tu contraseña
@@ -40,10 +40,14 @@ case "$(uname)" in
 esac
 DEST="$SCRIPTS/Utility"
 
-# Limpieza de instalaciones anteriores: la carpeta Edit (Resolve no la lista) y los .py (si no se piden).
+# Limpieza de instalaciones anteriores: la carpeta Edit (Resolve no la lista), los lanzadores en Lua que
+# intentaban ejecutar comandos (en Resolve 21 no hay io ni os.execute: no podían funcionar) y los .py.
 for d in "$SCRIPTS/Edit" "$DEST"; do
   if [ -d "$d" ]; then
-    [ "$PYTHON_TOO" = 1 ] && [ "$d" = "$DEST" ] || $SUDO rm -f "$d"/"Silence Cutter"*.py
+    $SUDO rm -f "$d/Silence Cutter.lua" "$d/Silence Cutter Check.lua"
+    if [ "$PYTHON_TOO" != 1 ] || [ "$d" != "$DEST" ]; then
+      $SUDO rm -f "$d"/"Silence Cutter"*.py
+    fi
   fi
 done
 [ -d "$SCRIPTS/Edit" ] && $SUDO rmdir "$SCRIPTS/Edit" 2>/dev/null || true
@@ -66,4 +70,4 @@ fi
 echo
 echo "Carpeta: $DEST"
 echo "Reinicia Resolve (cierra la app del todo) y busca Área de trabajo > Secuencias de comandos."
-echo "Primero ejecuta 'Silence Cutter Check' y mira Silence Cutter Check.log en: $REPO"
+echo "Uso: en la terminal  python3 -m silence_cutter tu_video.mov --fcpxml  y luego, en Resolve, ese script de menú."
