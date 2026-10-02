@@ -22,6 +22,13 @@ MIN_SPEECH = 0.15
 WHISPER_MODEL = "small"
 LANGUAGE = None  # ej. "es"; None = autodetectar
 TRANSCRIBE = True
+# Cortes por contenido con Claude (necesita ANTHROPIC_API_KEY). Dos pasadas:
+#   1) ANALYZE = True  -> escribe <video>.cortes.json / .cortes.md para revisar, no corta nada
+#   2) ANALYZE = False y SILENCE_CUTTER_CUTS=<ruta al .cortes.json> -> aplica los aprobados
+ANALYZE = False
+CUTS_FILE = os.environ.get("SILENCE_CUTTER_CUTS", "")
+AI_MODEL = None  # None = el predeterminado
+MAX_CUT = 0.5  # fracción máxima de palabras que se pueden cortar
 # manifiesto de overlays de Remotion (render-overlays.mjs); "" = sin overlays
 OVERLAYS_MANIFEST = os.environ.get("SILENCE_CUTTER_OVERLAYS", "")
 
@@ -34,8 +41,12 @@ def _log_path():
 
 
 def run(resolve):
-    from silence_cutter.core import (
-        parse_silencedetect, probe_duration, run_silencedetect, speech_segments, total_length,
+    from pathlib import Path
+
+    from silence_cutter.core import total_length
+    from silence_cutter.edit import InvalidDecisions
+    from silence_cutter.pipeline import (
+        analyze, apply_cuts, detect_segments, get_words, load_words, words_file,
     )
     from silence_cutter.resolve_integration import build_timeline
     from silence_cutter.script import build_cues, to_markdown, to_srt
@@ -51,20 +62,34 @@ def run(resolve):
     if not media or not os.path.isfile(media):
         return "No encuentro el archivo del primer clip: %r" % media
 
-    duration = probe_duration(media)
-    silences = parse_silencedetect(run_silencedetect(media, NOISE_DB, MIN_SILENCE), duration)
-    segments = speech_segments(silences, duration, PADDING, MIN_SPEECH)
-    stem = os.path.splitext(media)[0]
+    out = Path(media).parent
+    stem = Path(media).stem
+    duration, segments = detect_segments(media, NOISE_DB, MIN_SILENCE, PADDING, MIN_SPEECH)
+
+    if ANALYZE:  # paso 1: Claude propone, una persona revisa; no se corta nada
+        cuts, report, n = analyze(media, out, stem, WHISPER_MODEL, LANGUAGE, AI_MODEL, MAX_CUT)
+        return ("Claude propone %d cortes. Revisa %s y edita %s ('apply': false conserva un corte). "
+                "Luego define SILENCE_CUTTER_CUTS con esa ruta y ejecuta de nuevo (ANALYZE = False)."
+                % (n, report, cuts))
+
+    words = None
+    if CUTS_FILE:  # paso 2: aplicar los cortes aprobados
+        wf = words_file(out, stem)
+        if not wf.is_file():
+            return "Falta %s: ejecuta primero con ANALYZE = True." % wf
+        words = load_words(wf)
+        try:
+            segments = apply_cuts(segments, Path(CUTS_FILE), words, MIN_SPEECH, MAX_CUT)
+        except InvalidDecisions as exc:
+            return "Los cortes no son válidos:\n- " + "\n- ".join(exc.errors)
+
     msg = "%.1fs -> %.1fs (%d tramos)" % (duration, total_length(segments), len(segments))
 
     if TRANSCRIBE:
-        from silence_cutter.transcribe import transcribe
-
-        cues = build_cues(transcribe(media, WHISPER_MODEL, LANGUAGE), segments)
-        with open(stem + ".srt", "w", encoding="utf-8") as f:
-            f.write(to_srt(cues))
-        with open(stem + ".guion.md", "w", encoding="utf-8") as f:
-            f.write(to_markdown(cues, os.path.basename(stem)))
+        words = words or get_words(media, out, stem, WHISPER_MODEL, LANGUAGE)
+        cues = build_cues(words, segments)
+        (out / (stem + ".srt")).write_text(to_srt(cues), encoding="utf-8")
+        (out / (stem + ".guion.md")).write_text(to_markdown(cues, stem), encoding="utf-8")
         msg += "; guión con %d líneas" % len(cues)
 
     placements = None
@@ -74,9 +99,7 @@ def run(resolve):
         placements, skipped = place_overlays(load_manifest(OVERLAYS_MANIFEST), segments)
         msg += "; overlays %d ubicados, %d omitidos" % (len(placements), len(skipped))
 
-    name = build_timeline(
-        media, segments, os.path.basename(stem) + " - sin silencios", resolve, placements
-    )
+    name = build_timeline(media, segments, stem + " - sin silencios", resolve, placements)
     return "Listo: %s. Timeline '%s'." % (msg, name)
 
 
@@ -84,7 +107,9 @@ try:
     if HOME and HOME not in sys.path:
         sys.path.insert(0, HOME)
     result = run(resolve)  # noqa: F821 - `resolve` lo inyecta Resolve
-except BaseException:  # SystemExit incluido: los módulos salen con SystemExit
+except SystemExit as exc:  # los módulos avisan con SystemExit("mensaje claro")
+    result = str(exc.code) if exc.code else "Terminó sin mensaje."
+except BaseException:
     result = traceback.format_exc()
 with open(_log_path(), "w", encoding="utf-8") as _f:
     _f.write(result + "\n")

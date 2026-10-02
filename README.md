@@ -46,6 +46,27 @@ python -m silence_cutter entrevista.mp4 --language es --resolve
 | `--min-speech` | `0.15` | Descarta ruidos más cortos que esto. |
 | `--model` | `small` | Modelo de Whisper (`tiny`…`large-v3`). |
 
+## Cortes por contenido con Claude (revisión humana)
+
+Además de los silencios, Claude puede proponer qué quitar para que el video sea coherente: **tomas repetidas** (se conserva la más completa), **muletillas**, **falsos comienzos** y **digresiones fuera de tema**. Nunca corta solo: propone, tú revisas y recién entonces se aplica.
+
+```bash
+export ANTHROPIC_API_KEY=...
+# 1) transcribe y pide la propuesta (no corta nada)
+python -m silence_cutter entrevista.mp4 --language es --analyze
+#    -> entrevista.cortes.md (para leer) y entrevista.cortes.json (para editar)
+# 2) pon "apply": false en los cortes que quieras conservar, y aplica
+python -m silence_cutter entrevista.mp4 --apply-cuts entrevista.cortes.json
+```
+
+Cómo está protegido:
+- Claude responde con rangos de **palabras**, no de tiempo. El código valida todo (índices en rango, sin solapes, tipo y motivo presentes) y, si la respuesta es inválida, se la devuelve **una vez** con los errores concretos; si vuelve a fallar, aborta.
+- `--max-cut` (50 % por defecto) rechaza propuestas que borrarían demasiado.
+- Los índices de palabra solo valen para la transcripción de esa corrida, que queda guardada en `<video>.words.json`. Si borras ese archivo, vuelve a correr `--analyze`.
+- El prompt le pide ser conservador: ante la duda, no corta.
+
+Qué **no** hace: no mira la imagen (solo audio y texto), así que no detecta que te equivocaste a cámara en silencio. Y la calidad de las decisiones depende del modelo y de la transcripción; revisa siempre `.cortes.md`. La transcripción se envía a la API de Anthropic y tiene costo por uso.
+
 ## Desde el menú de Resolve (sin terminal)
 
 1. Copia `resolve_menu/Silence Cutter.py` a la carpeta de scripts de Resolve (`Scripts/Edit`):
@@ -55,7 +76,7 @@ python -m silence_cutter entrevista.mp4 --language es --resolve
 2. Define la variable de entorno `SILENCE_CUTTER_HOME` con la ruta de este repo (o edita `HOME` en el script). Ajusta ahí mismo `NOISE_DB`, `LANGUAGE`, etc.
 3. Con una timeline abierta y el clip en V1: *Workspace > Scripts > Edit > Silence Cutter*.
 
-En macOS añade a mano `/opt/homebrew/bin` al PATH si `ffmpeg` no se encuentra (el script ya lo intenta). Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
+En macOS añade a mano `/opt/homebrew/bin` al PATH si `ffmpeg` no se encuentra (el script ya lo intenta). Para los cortes con Claude, el script tiene `ANALYZE` y `SILENCE_CUTTER_CUTS` (dos pasadas, igual que arriba). Usa el primer clip de V1 y su archivo completo; el resultado (o el error) queda en `Silence Cutter.log`.
 
 ## Overlays de Remotion (lower thirds, keywords, etc.)
 
