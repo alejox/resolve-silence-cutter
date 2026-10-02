@@ -22,6 +22,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("project", help="proyecto.json con los canales (ver examples/proyecto.ejemplo.json)")
     p.add_argument("--propose-cuts", action="store_true", help="Claude propone cortes por contenido (como --analyze); no corta nada")
     p.add_argument("--cuts", default=None, metavar="CORTES.JSON", help="aplica cortes aprobados además de los silencios")
+    p.add_argument("--sync", action="store_true",
+                   help="calcula los offsets de cámara/pantalla por audio y los guarda en <proyecto>.offsets.json")
     p.add_argument("--plan", action="store_true", help="Claude propone los planos y escribe <proyecto>.planos.json para revisar")
     p.add_argument("--apply-plan", default=None, metavar="PLANOS.JSON", help="aplica el plan de planos aprobado")
     p.add_argument("--noise", type=lambda v: None if v.lower() == "auto" else float(v), default=None, metavar="auto|DB")
@@ -99,6 +101,28 @@ def apply_plan(project: Project, plan_path: Path, out: Path, stem: str, opts, cu
     return msg
 
 
+def run_sync(project: Project, project_path: str) -> int:
+    from .project import offsets_path
+    from .sync import sync_offset
+
+    found: dict[str, float] = {}
+    for s in project.sources.values():
+        if s.name == project.audio or s.role not in ("camera", "screen", "audio"):
+            continue  # las tomas de producto no se sincronizan: no se grabaron junto al maestro
+        try:
+            r = sync_offset(project.master.file, s.file)
+        except ValueError as exc:
+            print(f"  {s.name}: {exc}; pon el offset a mano en el proyecto")
+            continue
+        flag = "" if r.confidence >= 0.5 else "  <- confianza baja, revísalo"
+        print(f"  {s.name}: offset {r.offset:+.2f}s (confianza {r.confidence:.2f}){flag}")
+        found[s.name] = r.offset
+    if found:
+        offsets_path(project_path).write_text(json.dumps({"offsets": found}, indent=2), encoding="utf-8")
+        print(f"Offsets guardados en {offsets_path(project_path)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     project = load(args.project)
@@ -110,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             "min_speech": args.min_speech, "model": args.model, "language": args.language,
             "max_cut": args.max_cut}
 
+    if args.sync:
+        return run_sync(project, args.project)
     if args.propose_cuts:
         cuts, report, n = analyze(project.master.file, out, stem, args.model, args.language, args.ai_model, args.max_cut)
         print(f"Claude propone {n} cortes.\n  Revisa: {report}\n  Edita:  {cuts}")

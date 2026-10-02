@@ -85,9 +85,23 @@ def parse_project(data: dict, base_dir: Path | None = None, check_files: bool = 
     return Project(sources, audio, default)
 
 
+def offsets_path(project_path: str) -> Path:
+    p = Path(project_path)
+    return p.with_name(p.stem + ".offsets.json")
+
+
 def load_project(path: str, check_files: bool = True) -> Project:
+    """Carga el proyecto; si existe `<proyecto>.offsets.json` (de --sync) sus offsets mandan."""
     p = Path(path)
-    return parse_project(json.loads(p.read_text(encoding="utf-8")), p.parent, check_files)
+    data = json.loads(p.read_text(encoding="utf-8"))
+    project = parse_project(data, p.parent, check_files)
+    op = offsets_path(path)
+    if op.is_file():
+        for name, off in json.loads(op.read_text(encoding="utf-8")).get("offsets", {}).items():
+            if name in project.sources and name != project.audio:
+                src = project.sources[name]
+                project.sources[name] = Source(src.name, src.file, src.role, src.description, float(off))
+    return project
 
 
 def describe(project: Project) -> str:
