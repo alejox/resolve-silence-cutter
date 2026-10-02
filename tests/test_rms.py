@@ -61,6 +61,25 @@ class RenderTests(unittest.TestCase):
                                        capture_output=True, text=True, check=True).stdout)
             self.assertAlmostEqual(dur, 3.0, delta=0.2)
 
+    def test_render_cut_outputs_8bit_bt709_even_for_10bit_bt2020_source(self):
+        import subprocess, tempfile
+        from pathlib import Path
+
+        from silence_cutter.core import render_cut
+
+        with tempfile.TemporaryDirectory() as d:
+            src, out = Path(d) / "s.mov", Path(d) / "o.mp4"
+            subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                            "testsrc=d=3:s=320x180:r=24", "-f", "lavfi", "-i", "sine=f=440:d=3",
+                            "-shortest", "-pix_fmt", "yuv420p10le", "-c:v", "libx265",
+                            "-colorspace", "bt2020nc", "-color_primaries", "bt2020",
+                            str(src)], check=True)
+            render_cut(str(src), [Interval(0.0, 2.0)], str(out), height=144)
+            info = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+                                   "stream=pix_fmt,color_space", "-of", "csv=p=0", str(out)],
+                                  capture_output=True, text=True, check=True).stdout.strip()
+            self.assertEqual(info, "yuv420p,bt709")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -204,14 +204,19 @@ def render_cut(path: str, segments: list[Interval], out: str, height: int = 720,
     parts, joined = [], []
     for i, s in enumerate(segments):
         parts.append(
-            f"[0:v]trim=start={s.start:.3f}:end={s.end:.3f},setpts=PTS-STARTPTS,scale=-2:{height}[v{i}];"
+            f"[0:v]trim=start={s.start:.3f}:end={s.end:.3f},setpts=PTS-STARTPTS,"
+            f"scale=-2:{height}:out_color_matrix=bt709[v{i}];"
             f"[0:a]atrim=start={s.start:.3f}:end={s.end:.3f},asetpts=PTS-STARTPTS[a{i}]"
         )
         joined.append(f"[v{i}][a{i}]")
     graph = ";".join(parts) + ";" + "".join(joined) + f"concat=n={len(segments)}:v=1:a=1[v][a]"
+    # Siempre 8 bits y BT.709: un H.264 de 10 bits (p. ej. de una cámara que graba en 10 bits
+    # BT.2020) no abre en muchos reproductores, y Chromium lo muestra más oscuro.
     proc = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", path, "-filter_complex", graph,
-         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", str(crf), "-preset", "veryfast",
+         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+         "-crf", str(crf), "-preset", "veryfast",
          "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", out],
         capture_output=True, text=True,
     )
