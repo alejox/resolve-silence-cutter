@@ -67,3 +67,8 @@ local base = (REPO ~= "" and REPO) or os.getenv("HOME") or "."
 local f = io.open(base .. "/Silence Cutter Check.log", "w")
 if f then f:write(text .. "\n"); f:close() end
 print(text)
+
+-- Los scripts del menú no muestran ventanas: abre el resultado en tu editor de texto (Mac).
+if not os.getenv("SILENCE_CUTTER_NO_OPEN") then
+  pcall(run, "open -t " .. q(base .. "/Silence Cutter Check.log"))
+end

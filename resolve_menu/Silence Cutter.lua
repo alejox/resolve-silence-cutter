@@ -17,6 +17,7 @@ local MIN_SPEECH = 0.15    -- descarta ruidos más cortos que esto
 local TRANSCRIBE = false   -- true = también guión (.guion.md y .srt); necesita faster-whisper
 local LANGUAGE = ""        -- ej. "es"; "" = autodetectar
 
+local OPEN_LOG = "error"   -- cuándo abrir el .log en tu editor de texto (Mac): "error", "always" o "never"
 local EXTRA_PATH = "/opt/homebrew/bin:/usr/local/bin"  -- Resolve no hereda el PATH de la terminal en macOS
 
 if REPO == "" then REPO = os.getenv("SILENCE_CUTTER_HOME") or "" end
@@ -120,4 +121,11 @@ local function main()
 end
 
 local ok, result = pcall(main)
-write_log(ok and tostring(result) or ("Error inesperado: " .. tostring(result)))
+local text = ok and tostring(result) or ("Error inesperado: " .. tostring(result))
+write_log(text)
+
+-- Los scripts del menú no muestran ventanas: si algo salió mal, abre el log para que se vea el motivo.
+local failed = not text:find("^Listo")
+if (OPEN_LOG == "always" or (OPEN_LOG == "error" and failed)) and not os.getenv("SILENCE_CUTTER_NO_OPEN") then
+  pcall(run, "open -t " .. q(logpath()))
+end

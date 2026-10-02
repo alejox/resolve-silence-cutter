@@ -4,10 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-try:
-    from lupa import LuaRuntime
-except ImportError:  # pip install lupa
-    LuaRuntime = None
+try:  # LuaJIT es el motor de Resolve: si lupa lo trae, se prueba con ese (Lua 5.1)
+    from lupa.luajit21 import LuaRuntime
+except ImportError:
+    try:
+        from lupa import LuaRuntime
+    except ImportError:  # pip install lupa
+        LuaRuntime = None
 
 REPO = Path(__file__).resolve().parent.parent
 MENU = REPO / "resolve_menu"
@@ -75,7 +78,7 @@ class LuaLauncherTests(unittest.TestCase):
         self._home = os.environ.get("HOME", "")
         self.tmp = tempfile.TemporaryDirectory()
         self.d = Path(self.tmp.name)
-        self.env = {"SILENCE_CUTTER_HOME": str(REPO)}
+        self.env = {"SILENCE_CUTTER_HOME": str(REPO), "SILENCE_CUTTER_NO_OPEN": "1"}
 
     def tearDown(self):
         os.environ["HOME"] = self._home
@@ -117,7 +120,7 @@ class LuaLauncherTests(unittest.TestCase):
     def test_missing_repo_is_explained(self):
         home = self.d / "home"
         home.mkdir()
-        env = {"SILENCE_CUTTER_HOME": "", "HOME": str(home)}  # sin repo, el log va a la carpeta personal
+        env = {"SILENCE_CUTTER_HOME": "", "HOME": str(home), "SILENCE_CUTTER_NO_OPEN": "1"}  # sin repo, el log va a la carpeta personal
         try:
             _, log = run_script("Silence Cutter.lua", lambda l: None, env, log_dir=home)
         finally:
@@ -128,6 +131,31 @@ class LuaLauncherTests(unittest.TestCase):
         _, log = run_script("Silence Cutter.lua", lambda l: set_items(l, clip_item(l, "/no/existe.mov")), self.env)
         self.assertIn("La herramienta falló", log)
         self.assertIn("No existe", log)
+
+    def test_log_is_opened_in_the_editor_on_error_but_not_on_success(self):
+        """Los scripts del menú no muestran ventanas: ante un error el log se abre con `open -t`."""
+        opened = []
+        wav = self.make_audio()
+
+        def run(items_builder, open_env):
+            lua = LuaRuntime(unpack_returned_tuples=True)
+            lua.execute("HAS_TIMELINE = true; ITEMS = nil")
+            lua.execute(FAKE_RESOLVE)
+            lua.globals().py_popen = lambda cmd: (opened.append(cmd) if "open -t" in cmd else None) or py_popen(
+                cmd if "open -t" not in cmd else "true")
+            lua.execute("io.popen = function(cmd) local out = py_popen(cmd) or '' "
+                        "return { read = function(self, f) return out end, close = function(self) return true end } end")
+            items_builder(lua)
+            os.environ.pop("SILENCE_CUTTER_NO_OPEN", None)
+            os.environ["SILENCE_CUTTER_HOME"] = str(REPO)
+            lua.execute((MENU / "Silence Cutter.lua").read_text(encoding="utf-8"))
+            (REPO / "Silence Cutter.log").unlink(missing_ok=True)
+
+        run(lambda l: set_items(l), None)  # V1 vacía -> error
+        self.assertTrue(any("open -t" in c and "Silence Cutter.log" in c for c in opened), opened)
+        opened.clear()
+        run(lambda l: set_items(l, clip_item(l, str(wav))), None)  # éxito
+        self.assertEqual(opened, [])
 
     def test_check_script_reports_each_requirement(self):
         _, log = run_script("Silence Cutter Check.lua", lambda l: None, self.env)
